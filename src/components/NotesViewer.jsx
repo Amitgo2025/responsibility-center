@@ -7,6 +7,7 @@ import {
   listTagCategories,
 } from '../lib/db'
 import TagChip from './TagChip'
+import Lightbox from './Lightbox'
 
 export default function NotesViewer({ responsibility, isAdmin, onClose, onChanged }) {
   const [notes, setNotes] = useState([])
@@ -123,6 +124,7 @@ export default function NotesViewer({ responsibility, isAdmin, onClose, onChange
 export function NoteCard({ note, allTags, allCategories, isAdmin, onToggleStatus, onDelete, showResponsibilityHint }) {
   const tags = (note.tags || []).map((id) => allTags.find((t) => t.id === id)).filter(Boolean)
   const isOpen = note.status === 'open'
+  const [lightboxIndex, setLightboxIndex] = useState(null)
 
   return (
     <div
@@ -192,23 +194,34 @@ export function NoteCard({ note, allTags, allCategories, isAdmin, onToggleStatus
       {note.attachments && note.attachments.length > 0 && (
         <div className="grid grid-cols-3 gap-2 mt-2">
           {note.attachments.map((a, i) => (
-            <a
+            <button
               key={i}
-              href={a.dataUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block border border-ink-200 rounded overflow-hidden bg-ink-50 hover:border-accent transition"
+              type="button"
+              onClick={() => setLightboxIndex(i)}
+              className="block border border-ink-200 rounded overflow-hidden bg-ink-50 hover:border-accent transition group"
             >
               {a.type?.startsWith('image/') ? (
-                <img src={a.dataUrl} alt={a.name} className="w-full h-24 object-cover" />
+                <img
+                  src={a.dataUrl}
+                  alt={a.name}
+                  className="w-full h-32 object-contain bg-ink-50 group-hover:scale-[1.02] transition"
+                />
               ) : (
-                <div className="w-full h-24 flex items-center justify-center text-ink-500 text-xs p-2 text-center">
+                <div className="w-full h-32 flex items-center justify-center text-ink-500 text-xs p-2 text-center">
                   {a.name}
                 </div>
               )}
-            </a>
+            </button>
           ))}
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <Lightbox
+          gallery={note.attachments}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
   )

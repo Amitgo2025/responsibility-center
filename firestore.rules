@@ -31,5 +31,11 @@ service cloud.firestore {
     match /notes/{doc} {
       allow read, write: if true;
     }
+    match /scheduleTasks/{doc} {
+      allow read, write: if true;
+    }
+    match /taskInstances/{doc} {
+      allow read, write: if true;
+    }
   }
 }

@@ -8,6 +8,7 @@ import {
   listAllNotes,
 } from '../lib/db'
 import TagChip from '../components/TagChip'
+import TodayScheduleBanner from '../components/TodayScheduleBanner'
 
 const STATUS_LABELS = {
   active: { label: 'Active', tone: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
@@ -15,7 +16,7 @@ const STATUS_LABELS = {
   transitioning: { label: 'Transitioning', tone: 'bg-sky-100 text-sky-800 border-sky-200' },
 }
 
-export default function AllResponsibilitiesPage() {
+export default function AllResponsibilitiesPage({ role, currentUser }) {
   const navigate = useNavigate()
   const [responsibilities, setResponsibilities] = useState([])
   const [tabs, setTabs] = useState([])
@@ -193,6 +194,11 @@ export default function AllResponsibilitiesPage() {
       </header>
 
       <div className="px-10 py-6 max-w-6xl">
+        {/* Today's schedule — prominent banner */}
+        <div className="mb-5">
+          <TodayScheduleBanner currentUser={currentUser} role={role} />
+        </div>
+
         {/* Search bar */}
         <div className="bg-white border border-ink-200 rounded-lg p-5 mb-4 space-y-4">
           <div className="flex items-center gap-3">

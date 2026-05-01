@@ -264,6 +264,199 @@ export async function deleteNote(id) {
   await deleteDoc(doc(db, 'notes', id))
 }
 
+// ============== SCHEDULE: TASK TEMPLATES ==============
+// A scheduled task template is a recurring/one-off task definition.
+// Cadence types:
+//   - 'daily'      : every day
+//   - 'weekly'     : on specific days of the week (daysOfWeek: [0..6], 0=Sunday)
+//   - 'dates'      : on specific calendar dates (dates: ['YYYY-MM-DD', ...])
+//   - 'custom'     : explicit per-date assignments (handled via assignments map)
+// Assignments map: { 'YYYY-MM-DD': 'personId' } — which person owns that date.
+// If no assignment exists for a generated date, it shows up as "unassigned".
+
+export async function listScheduleTasks() {
+  const snap = await getDocs(collection(db, 'scheduleTasks'))
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  items.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999))
+  return items
+}
+
+export async function createScheduleTask(data) {
+  const tasks = await listScheduleTasks()
+  const maxOrder = tasks.reduce((m, t) => Math.max(m, t.sortOrder ?? 0), -1)
+  const payload = {
+    name: data.name || '',
+    description: data.description || '',
+    cadence: data.cadence || 'daily', // 'daily' | 'weekly' | 'dates' | 'custom'
+    daysOfWeek: data.daysOfWeek || [], // for 'weekly'
+    dates: data.dates || [], // for 'dates'
+    assignments: data.assignments || {}, // map of { 'YYYY-MM-DD': 'personId' }
+    color: data.color || '#c46a3a',
+    active: data.active !== false,
+    sortOrder: maxOrder + 1,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  const ref = await addDoc(collection(db, 'scheduleTasks'), payload)
+  return { id: ref.id, ...payload }
+}
+
+export async function updateScheduleTask(id, patch) {
+  await updateDoc(doc(db, 'scheduleTasks', id), {
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+export async function deleteScheduleTask(id) {
+  // Also delete any task instances tied to this template
+  const snap = await getDocs(query(collection(db, 'taskInstances'), where('templateId', '==', id)))
+  await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, 'taskInstances', d.id))))
+  await deleteDoc(doc(db, 'scheduleTasks', id))
+}
+
+// Bulk-set assignments for a template — used by the calendar UI
+export async function setScheduleAssignments(taskId, assignments) {
+  await updateDoc(doc(db, 'scheduleTasks', taskId), {
+    assignments,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+// ============== SCHEDULE: TASK INSTANCES ==============
+// Instances are concrete "this task on this date" records.
+// They are created lazily when a date is reached (or on demand).
+// Each has status: 'open' | 'closed' and a closure log.
+
+export async function listTaskInstances(opts = {}) {
+  // opts: { date, dateFrom, dateTo, status }
+  let q = collection(db, 'taskInstances')
+  const constraints = []
+  if (opts.date) constraints.push(where('date', '==', opts.date))
+  if (opts.status) constraints.push(where('status', '==', opts.status))
+  if (constraints.length) q = query(q, ...constraints)
+  const snap = await getDocs(q)
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  // Filter date range client-side if needed
+  if (opts.dateFrom || opts.dateTo) {
+    return items.filter((i) => {
+      if (opts.dateFrom && i.date < opts.dateFrom) return false
+      if (opts.dateTo && i.date > opts.dateTo) return false
+      return true
+    })
+  }
+  return items
+}
+
+export async function createTaskInstance(data) {
+  const payload = {
+    templateId: data.templateId,
+    name: data.name || '',
+    date: data.date, // 'YYYY-MM-DD'
+    personId: data.personId || '',
+    color: data.color || '#c46a3a',
+    status: 'open',
+    closedBy: null,
+    closedAt: null,
+    createdAt: new Date().toISOString(),
+  }
+  const ref = await addDoc(collection(db, 'taskInstances'), payload)
+  return { id: ref.id, ...payload }
+}
+
+export async function closeTaskInstance(id, closer) {
+  await updateDoc(doc(db, 'taskInstances', id), {
+    status: 'closed',
+    closedBy: closer || 'unknown',
+    closedAt: new Date().toISOString(),
+  })
+}
+
+export async function reopenTaskInstance(id) {
+  await updateDoc(doc(db, 'taskInstances', id), {
+    status: 'open',
+    closedBy: null,
+    closedAt: null,
+  })
+}
+
+export async function deleteTaskInstance(id) {
+  await deleteDoc(doc(db, 'taskInstances', id))
+}
+
+// Make sure today's task instances exist — call once on app load.
+// For each active template, if today should have an instance per its cadence,
+// and no instance exists yet for (templateId, today's date), create one.
+export async function ensureTodayInstances() {
+  const today = todayDateString()
+  const dayOfWeek = new Date(today + 'T00:00:00').getDay()
+
+  const [templates, existing] = await Promise.all([
+    listScheduleTasks(),
+    listTaskInstances({ date: today }),
+  ])
+  const existingTplIds = new Set(existing.map((i) => i.templateId))
+
+  const created = []
+  for (const tpl of templates) {
+    if (!tpl.active) continue
+    if (existingTplIds.has(tpl.id)) continue
+    if (!shouldRunOn(tpl, today, dayOfWeek)) continue
+    const personId = tpl.assignments?.[today] || ''
+    const inst = await createTaskInstance({
+      templateId: tpl.id,
+      name: tpl.name,
+      date: today,
+      personId,
+      color: tpl.color || '#c46a3a',
+    })
+    created.push(inst)
+  }
+  return { created }
+}
+
+export function shouldRunOn(template, dateStr, dayOfWeek) {
+  if (template.cadence === 'daily') return true
+  if (template.cadence === 'weekly') {
+    return Array.isArray(template.daysOfWeek) && template.daysOfWeek.includes(dayOfWeek)
+  }
+  if (template.cadence === 'dates') {
+    return Array.isArray(template.dates) && template.dates.includes(dateStr)
+  }
+  if (template.cadence === 'custom') {
+    // For 'custom', a date counts if it has an explicit assignment
+    return !!(template.assignments && template.assignments[dateStr])
+  }
+  return false
+}
+
+export function todayDateString() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Generate the upcoming dates a template will run, between dateFrom and dateTo
+export function generateScheduledDates(template, dateFrom, dateTo) {
+  const result = []
+  const start = new Date(dateFrom + 'T00:00:00')
+  const end = new Date(dateTo + 'T00:00:00')
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const dateStr = `${y}-${m}-${day}`
+    if (shouldRunOn(template, dateStr, d.getDay())) {
+      result.push(dateStr)
+    }
+  }
+  return result
+}
+
 // ============== SEED ==============
 export async function seedDefaultData() {
   const now = new Date().toISOString()

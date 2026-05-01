@@ -1,6 +1,12 @@
 # Responsibility Center
 
-אפליקציית React + Firebase לניהול אחריות בצוות. גרסה 2 כוללת:
+אפליקציית React + Firebase לניהול אחריות בצוות.
+
+**גרסה 1.2 — חדש:**
+- **Schedule** — לוח זמנים יומי. אדמין מגדיר משימות חוזרות (יומית / שבועית / תאריכים ספציפיים / Custom) ומשבץ אדם אחר בכל יום דרך לוח שנה. משימות היום קופצות בראש "All Responsibilities" ונשארות פתוחות עד שמישהו סוגר. כל סגירה נרשמת — שם המשימה, מי סגר, מתי.
+- **Image lightbox** — לחיצה על סקרינשוט פותחת אותו בגדול עם חצים בין תמונות. בלי tab חדש, בלי קרופ.
+
+**גרסה 1.1:**
 
 - שתי תצוגות לכל אדם — **Media Buying Tasks** (משימות שוטפות לפי הלאנים) ו-**Other Responsibilities** (אחריות אופרטיבית לרוחב, כמו דוחות, חשבונות, compliance)
 - **All Responsibilities** — דף חיפוש אחד עם כל האחריות בצוות, עם פילטרים לפי אדם, סקשן, סטטוס, ותגיות
@@ -15,7 +21,9 @@
 - `responsibilities/{id}` — כל האחריות, עם `personId`, `section`, `tags[]`
 - `tagCategories/{id}` — קטגוריות תגיות
 - `tags/{id}` — תגיות (כל תגית עם `categoryId`)
-- `notes/{id}` — הערות/בקשות, מקושר ל-`responsibilityId` ו-`personId`
+- `notes/{id}` — הערות/בקשות
+- `scheduleTasks/{id}` — תבניות משימות מתוזמנות עם `cadence` ו-`assignments`
+- `taskInstances/{id}` — משימות יום ספציפיות, עם `status` ו-log סגירה
 
 ## הפעלה ראשונה (אם זה Firebase project חדש)
 

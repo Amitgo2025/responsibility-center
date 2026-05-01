@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import AllResponsibilitiesPage from './pages/AllResponsibilitiesPage'
 import NotesPage from './pages/NotesPage'
+import SchedulePage from './pages/SchedulePage'
 import Sidebar from './components/Sidebar'
 import TabView from './components/TabView'
 import AdminPanel from './components/AdminPanel'
@@ -85,8 +86,12 @@ function ProtectedShell() {
         )}
         <Routes>
           <Route path="/" element={<Navigate to="/all" replace />} />
-          <Route path="/all" element={<AllResponsibilitiesPage />} />
+          <Route
+            path="/all"
+            element={<AllResponsibilitiesPage role={session.role} currentUser={session} />}
+          />
           <Route path="/notes" element={<NotesPage role={session.role} />} />
+          <Route path="/schedule" element={<SchedulePage role={session.role} />} />
           <Route
             path="/tab/:tabId"
             element={

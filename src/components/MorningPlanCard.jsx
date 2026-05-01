@@ -153,7 +153,7 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
     if (todayPlan) {
       return (
         <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-5 shadow-sm">
-          <div className="flex items-baseline gap-2 mb-3">
+          <div className="flex items-baseline gap-2 mb-3 flex-wrap">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
@@ -161,6 +161,11 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
             <span className="text-xs text-emerald-700">
               · {formatIsraelTime(todayPlan.submittedAt)}
             </span>
+            {todayPlan.status === 'closed' && (
+              <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded bg-emerald-700 text-white font-medium">
+                Closed
+              </span>
+            )}
             <button
               onClick={() => setCollapsed(!collapsed)}
               className="ml-auto text-xs text-ink-500 hover:text-ink-900 underline"
@@ -169,11 +174,28 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
             </button>
           </div>
           {!collapsed && (
-            <div className="space-y-2">
-              {todayPlan.lines.map((line, i) => (
-                <PlanLineDisplay key={i} line={line} platformTags={platformTags} />
-              ))}
-            </div>
+            <>
+              <div className="space-y-2">
+                {todayPlan.lines.map((line, i) => (
+                  <PlanLineDisplay key={i} line={line} platformTags={platformTags} />
+                ))}
+              </div>
+              {todayPlan.status === 'closed' && todayPlan.feedback && (
+                <div className="mt-4 pt-4 border-t border-emerald-200">
+                  <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
+                    End-of-day feedback
+                    {todayPlan.closedAt && (
+                      <span className="ml-2 text-ink-400 normal-case tracking-normal">
+                        · {formatIsraelTime(todayPlan.closedAt)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">
+                    {todayPlan.feedback}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )
@@ -239,15 +261,19 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
     )
   }
 
-  // ============== OWNER VIEW: today already submitted (read-only) ==============
+  // ============== OWNER VIEW: today already submitted ==============
+  // If still in 'submitted' state, owner can add end-of-day feedback to close it now.
   if (todayPlan) {
+    const isSubmittedNotClosed = todayPlan.status === 'submitted'
     return (
       <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-5 shadow-sm">
-        <div className="flex items-baseline gap-2 mb-3">
+        <div className="flex items-baseline gap-2 mb-3 flex-wrap">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#047857" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
-          <h2 className="font-display text-xl text-ink-900">Today's plan submitted</h2>
+          <h2 className="font-display text-xl text-ink-900">
+            Today's plan {todayPlan.status === 'closed' ? 'closed' : 'submitted'}
+          </h2>
           <span className="text-xs text-emerald-700">
             · sent at {formatIsraelTime(todayPlan.submittedAt)}
           </span>
@@ -258,11 +284,76 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
             {collapsed ? 'Show' : 'Collapse'}
           </button>
         </div>
+
         {!collapsed && (
           <div className="space-y-2">
             {todayPlan.lines.map((line, i) => (
               <PlanLineDisplay key={i} line={line} platformTags={platformTags} />
             ))}
+          </div>
+        )}
+
+        {/* End-of-day feedback section */}
+        {isSubmittedNotClosed && (
+          <div className="mt-4 pt-4 border-t border-emerald-200">
+            <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
+              End-of-day feedback (optional but recommended)
+            </div>
+            <textarea
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              rows={2}
+              placeholder="How did the day go? What got done, what didn't…"
+              className="w-full px-3 py-2 bg-white border border-ink-200 rounded text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+            />
+            <button
+              onClick={async () => {
+                if (!feedback.trim()) {
+                  setError('Add a short feedback before closing.')
+                  return
+                }
+                setSubmitting(true)
+                setError('')
+                try {
+                  await closeDailyPlan(
+                    todayPlan.id,
+                    feedback.trim(),
+                    currentUser?.displayName || '',
+                  )
+                  setFeedback('')
+                  await refresh()
+                } catch (err) {
+                  setError(err.message)
+                } finally {
+                  setSubmitting(false)
+                }
+              }}
+              disabled={submitting || !feedback.trim()}
+              className="mt-2 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-sm rounded transition disabled:opacity-40"
+            >
+              {submitting ? 'Saving…' : 'Close day with feedback'}
+            </button>
+            {error && (
+              <div className="mt-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                {error}
+              </div>
+            )}
+          </div>
+        )}
+
+        {todayPlan.status === 'closed' && todayPlan.feedback && !collapsed && (
+          <div className="mt-4 pt-4 border-t border-emerald-200">
+            <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
+              End-of-day feedback
+              {todayPlan.closedAt && (
+                <span className="ml-2 text-ink-400 normal-case tracking-normal">
+                  · {formatIsraelTime(todayPlan.closedAt)}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">
+              {todayPlan.feedback}
+            </p>
           </div>
         )}
       </div>

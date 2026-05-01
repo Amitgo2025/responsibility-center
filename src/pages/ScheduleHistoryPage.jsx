@@ -3,6 +3,9 @@ import {
   listTaskInstances,
   listScheduleTasks,
   listTabs,
+  listDailyPlans,
+  listTags,
+  listTagCategories,
   reassignTaskInstance,
   effectiveStatus,
   formatIsraelTime,
@@ -10,6 +13,55 @@ import {
 } from '../lib/db'
 
 export default function ScheduleHistoryPage({ role }) {
+  const [view, setView] = useState('tasks') // 'tasks' | 'plans'
+
+  return (
+    <main className="flex-1 bg-paper min-h-screen">
+      <header className="border-b border-ink-200 bg-white">
+        <div className="px-10 py-8 max-w-6xl">
+          <div className="text-[11px] uppercase tracking-widest text-ink-400 mb-2">
+            History
+          </div>
+          <h1 className="font-display text-4xl text-ink-900 mb-2">Performance log</h1>
+          <p className="text-ink-500 text-sm">
+            Schedule tasks and morning plans — what happened, when, by whom.
+          </p>
+        </div>
+        <div className="px-10 max-w-6xl flex gap-1">
+          <ViewTab active={view === 'tasks'} onClick={() => setView('tasks')}>
+            Schedule tasks
+          </ViewTab>
+          <ViewTab active={view === 'plans'} onClick={() => setView('plans')}>
+            Daily plans
+          </ViewTab>
+        </div>
+      </header>
+
+      {view === 'tasks' ? (
+        <TaskInstancesView role={role} />
+      ) : (
+        <DailyPlansView role={role} />
+      )}
+    </main>
+  )
+}
+
+function ViewTab({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+        active
+          ? 'border-accent text-ink-900'
+          : 'border-transparent text-ink-400 hover:text-ink-700'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function TaskInstancesView({ role }) {
   const isAdmin = role === 'admin'
   const [instances, setInstances] = useState([])
   const [templates, setTemplates] = useState([])
@@ -149,23 +201,10 @@ export default function ScheduleHistoryPage({ role }) {
   }
 
   return (
-    <main className="flex-1 bg-paper min-h-screen">
-      <header className="border-b border-ink-200 bg-white">
-        <div className="px-10 py-8 max-w-6xl">
-          <div className="text-[11px] uppercase tracking-widest text-ink-400 mb-2">
-            Schedule history
-          </div>
-          <h1 className="font-display text-4xl text-ink-900 mb-2">Performance log</h1>
-          <p className="text-ink-500 text-sm">
-            Every scheduled task — done, missed, or still open. Times are shown in Israel time.
-          </p>
-        </div>
-      </header>
-
-      <div className="px-10 py-6 max-w-6xl">
-        {error && (
-          <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-            {error}
+    <div className="px-10 py-6 max-w-6xl">
+      {error && (
+        <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {error}
           </div>
         )}
 
@@ -325,8 +364,339 @@ export default function ScheduleHistoryPage({ role }) {
             </table>
           </div>
         )}
+    </div>
+  )
+}
+
+// =================================================
+// Daily Plans History View
+// =================================================
+function DailyPlansView({ role }) {
+  const [plans, setPlans] = useState([])
+  const [tabs, setTabs] = useState([])
+  const [tags, setTags] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  // Default range: last 14 days
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 14)
+    return formatDateInput(d)
+  })
+  const [dateTo, setDateTo] = useState(() => formatDateInput(new Date()))
+
+  const [statusFilter, setStatusFilter] = useState('all') // all | submitted | closed
+  const [personFilter, setPersonFilter] = useState('')
+  const [search, setSearch] = useState('')
+
+  async function refresh() {
+    try {
+      const [p, t, tg] = await Promise.all([
+        listDailyPlans({ dateFrom, dateTo }),
+        listTabs(),
+        listTags(),
+      ])
+      setPlans(p)
+      setTabs(t)
+      setTags(tg)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    ;(async () => {
+      await refresh()
+      if (active) setLoading(false)
+    })()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo])
+
+  const tabsById = useMemo(() => {
+    const m = {}
+    tabs.forEach((t) => (m[t.id] = t))
+    return m
+  }, [tabs])
+
+  const tagsById = useMemo(() => {
+    const m = {}
+    tags.forEach((t) => (m[t.id] = t))
+    return m
+  }, [tags])
+
+  const filtered = useMemo(() => {
+    const lc = search.trim().toLowerCase()
+    return plans.filter((p) => {
+      if (personFilter && p.personId !== personFilter) return false
+      if (statusFilter !== 'all' && p.status !== statusFilter) return false
+      if (lc) {
+        const lanes = (p.lines || []).map((l) => l.lane || '').join(' ')
+        const notes = (p.lines || []).map((l) => l.notes || '').join(' ')
+        const personName = tabsById[p.personId]?.name || ''
+        const hay = [lanes, notes, personName, p.feedback || ''].join(' ').toLowerCase()
+        if (!hay.includes(lc)) return false
+      }
+      return true
+    })
+  }, [plans, search, personFilter, statusFilter, tabsById])
+
+  // Sort: most recent first
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date)
+      const at = a.submittedAt || a.createdAt || ''
+      const bt = b.submittedAt || b.createdAt || ''
+      return bt.localeCompare(at)
+    })
+  }, [filtered])
+
+  const stats = useMemo(() => {
+    const total = filtered.length
+    const closed = filtered.filter((p) => p.status === 'closed').length
+    const submitted = filtered.filter((p) => p.status === 'submitted').length
+    return { total, closed, submitted }
+  }, [filtered])
+
+  function setRange(days) {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - days)
+    setDateFrom(formatDateInput(start))
+    setDateTo(formatDateInput(end))
+  }
+
+  function clearFilters() {
+    setStatusFilter('all')
+    setPersonFilter('')
+    setSearch('')
+  }
+
+  return (
+    <div className="px-10 py-6 max-w-6xl">
+      {error && (
+        <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <StatCard label="Total" value={stats.total} tone="ink" />
+        <StatCard label="Closed (with feedback)" value={stats.closed} tone="emerald" />
+        <StatCard label="Submitted, not closed" value={stats.submitted} tone="amber" />
       </div>
-    </main>
+
+      <div className="bg-white border border-ink-200 rounded-lg p-4 mb-4 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] uppercase tracking-widest text-ink-400 font-medium">
+            Range:
+          </span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-2 py-1 text-sm bg-paper border border-ink-200 rounded font-mono"
+          />
+          <span className="text-ink-400 text-sm">→</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-2 py-1 text-sm bg-paper border border-ink-200 rounded font-mono"
+          />
+          <div className="flex gap-1 ml-2">
+            <RangePill onClick={() => setRange(7)}>7d</RangePill>
+            <RangePill onClick={() => setRange(14)}>14d</RangePill>
+            <RangePill onClick={() => setRange(30)}>30d</RangePill>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1.5 text-xs rounded-full border transition ${
+              statusFilter === 'all'
+                ? 'bg-ink-900 text-white border-ink-900'
+                : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setStatusFilter('closed')}
+            className={`px-3 py-1.5 text-xs rounded-full border transition ${
+              statusFilter === 'closed'
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+            }`}
+          >
+            Closed
+          </button>
+          <button
+            onClick={() => setStatusFilter('submitted')}
+            className={`px-3 py-1.5 text-xs rounded-full border transition ${
+              statusFilter === 'submitted'
+                ? 'bg-amber-500 text-white border-amber-500'
+                : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+            }`}
+          >
+            Submitted, no feedback yet
+          </button>
+
+          <select
+            value={personFilter}
+            onChange={(e) => setPersonFilter(e.target.value)}
+            className="ml-auto px-2 py-1.5 text-xs bg-white border border-ink-200 rounded"
+          >
+            <option value="">All people</option>
+            {tabs.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+
+          {(statusFilter !== 'all' || personFilter || search) && (
+            <button
+              onClick={clearFilters}
+              className="text-xs text-ink-500 hover:text-ink-900 underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search lane, notes, person, feedback…"
+          className="w-full px-3 py-2 bg-paper border border-ink-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+      </div>
+
+      <div className="text-sm text-ink-500 mb-3 tabular">
+        {sorted.length} {sorted.length === 1 ? 'plan' : 'plans'}
+      </div>
+
+      {loading && <p className="text-ink-400 text-sm">Loading…</p>}
+      {!loading && sorted.length === 0 && (
+        <div className="bg-white border border-dashed border-ink-200 rounded-lg p-12 text-center">
+          <p className="text-ink-400">No plans match these filters.</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sorted.map((plan) => (
+          <PlanHistoryCard
+            key={plan.id}
+            plan={plan}
+            person={tabsById[plan.personId]}
+            tagsById={tagsById}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PlanHistoryCard({ plan, person, tagsById }) {
+  const [collapsed, setCollapsed] = useState(true)
+  const isClosed = plan.status === 'closed'
+
+  return (
+    <div
+      className={`bg-white border rounded-lg p-4 ${
+        isClosed ? 'border-emerald-200' : 'border-amber-200'
+      }`}
+    >
+      <div className="flex items-start gap-3 flex-wrap">
+        {person && (
+          <span
+            className="px-2 py-0.5 text-xs font-medium rounded"
+            style={{
+              background: person.color || '#c46a3a',
+              color: getTextColor(person.color || '#c46a3a'),
+            }}
+          >
+            {person.name}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-ink-900 tabular">
+              {formatHumanDate(plan.date)}
+            </span>
+            <span
+              className={`px-2 py-0.5 text-[10px] uppercase tracking-wider rounded border ${
+                isClosed
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              {isClosed ? 'Closed' : 'Submitted'}
+            </span>
+            <span className="text-[11px] text-ink-400 font-mono">
+              · {(plan.lines || []).length} line{(plan.lines || []).length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="text-[11px] text-ink-400 mt-0.5">
+            Sent {plan.submittedAt ? formatIsraelTime(plan.submittedAt) : '—'}
+            {isClosed && plan.closedAt && (
+              <span> · Closed {formatIsraelTime(plan.closedAt)}</span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="text-xs text-ink-500 hover:text-ink-900 underline"
+        >
+          {collapsed ? 'Show details' : 'Hide'}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <div className="mt-3 pt-3 border-t border-ink-100 space-y-2">
+          {(plan.lines || []).map((line, i) => (
+            <div key={i} className="border-l-2 border-accent/40 pl-3 py-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-ink-900">{line.lane}</span>
+                {(line.platforms || []).map((tagId) => {
+                  const tag = tagsById[tagId]
+                  if (!tag) return null
+                  return (
+                    <span
+                      key={tagId}
+                      className="text-[10px] px-1.5 py-0.5 rounded-full"
+                      style={{ background: tag.color, color: getTextColor(tag.color) }}
+                    >
+                      {tag.name}
+                    </span>
+                  )
+                })}
+              </div>
+              {line.notes && (
+                <p className="text-sm text-ink-600 mt-0.5 leading-relaxed whitespace-pre-wrap">
+                  {line.notes}
+                </p>
+              )}
+            </div>
+          ))}
+
+          {isClosed && plan.feedback && (
+            <div className="mt-3 pt-3 border-t border-emerald-100">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-700 font-medium mb-1">
+                End-of-day feedback
+              </div>
+              <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">
+                {plan.feedback}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

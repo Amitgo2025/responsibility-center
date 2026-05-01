@@ -466,29 +466,10 @@ function TaskEditor({ task, onClose, onSaved }) {
             <label className="block text-[11px] uppercase tracking-widest text-ink-400 mb-1.5 font-medium">
               Deadline (Israel time, optional)
             </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="time"
-                lang="he-IL"
-                step="60"
-                value={deadlineTime}
-                onChange={(e) => setDeadlineTime(e.target.value)}
-                className="px-3 py-2 bg-white border border-ink-200 rounded text-ink-900 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
-                style={{ fontFeatureSettings: '"tnum"' }}
-              />
-              {deadlineTime && (
-                <button
-                  type="button"
-                  onClick={() => setDeadlineTime('')}
-                  className="text-xs text-ink-500 hover:text-red-600"
-                >
-                  Clear
-                </button>
-              )}
-              <span className="text-xs text-ink-400">
-                Use 24-hour format (e.g. <span className="font-mono">18:00</span>). After this hour an unfinished task is logged as <span className="text-red-600 font-medium">missed</span>.
-              </span>
-            </div>
+            <Time24Picker value={deadlineTime} onChange={setDeadlineTime} />
+            <p className="text-xs text-ink-400 mt-1.5">
+              After this hour an unfinished task is logged as <span className="text-red-600 font-medium">missed</span>.
+            </p>
           </div>
 
           {error && (
@@ -808,6 +789,71 @@ function buildMonthGrid(year, month) {
   const rows = []
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7))
   return rows
+}
+
+function Time24Picker({ value, onChange }) {
+  // value is 'HH:MM' or '' for none
+  const [hh, mm] = (value || '').split(':')
+  const hourSel = hh || ''
+  const minSel = mm || ''
+
+  function update(newHh, newMm) {
+    if (!newHh && !newMm) {
+      onChange('')
+      return
+    }
+    const h = (newHh || '00').padStart(2, '0')
+    const m = (newMm || '00').padStart(2, '0')
+    onChange(`${h}:${m}`)
+  }
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+  // Common minute increments — keeps the menu manageable
+  const minutes = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center bg-white border border-ink-200 rounded overflow-hidden">
+        <select
+          value={hourSel}
+          onChange={(e) => update(e.target.value, minSel || '00')}
+          className="px-2 py-2 bg-white text-ink-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent border-0"
+          aria-label="Hour"
+        >
+          <option value="">--</option>
+          {hours.map((h) => (
+            <option key={h} value={h}>{h}</option>
+          ))}
+        </select>
+        <span className="px-1 text-ink-400 font-mono">:</span>
+        <select
+          value={minSel}
+          onChange={(e) => update(hourSel || '00', e.target.value)}
+          className="px-2 py-2 bg-white text-ink-900 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent border-0"
+          aria-label="Minute"
+        >
+          <option value="">--</option>
+          {minutes.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </div>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="text-xs text-ink-500 hover:text-red-600"
+        >
+          Clear
+        </button>
+      )}
+      {value && (
+        <span className="text-xs text-ink-500 font-mono">
+          (24h)
+        </span>
+      )}
+    </div>
+  )
 }
 
 function getTextColor(hex) {

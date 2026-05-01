@@ -469,9 +469,12 @@ function TaskEditor({ task, onClose, onSaved }) {
             <div className="flex items-center gap-2">
               <input
                 type="time"
+                lang="he-IL"
+                step="60"
                 value={deadlineTime}
                 onChange={(e) => setDeadlineTime(e.target.value)}
                 className="px-3 py-2 bg-white border border-ink-200 rounded text-ink-900 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+                style={{ fontFeatureSettings: '"tnum"' }}
               />
               {deadlineTime && (
                 <button
@@ -483,7 +486,7 @@ function TaskEditor({ task, onClose, onSaved }) {
                 </button>
               )}
               <span className="text-xs text-ink-400">
-                After this hour an unfinished task is logged as <span className="text-red-600 font-medium">missed</span>.
+                Use 24-hour format (e.g. <span className="font-mono">18:00</span>). After this hour an unfinished task is logged as <span className="text-red-600 font-medium">missed</span>.
               </span>
             </div>
           </div>

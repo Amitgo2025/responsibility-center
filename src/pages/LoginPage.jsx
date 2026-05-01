@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { tryLogin, getAuthConfig } from '../lib/auth'
+import { tryLogin, getAuthConfig, setDisplayName } from '../lib/auth'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -26,9 +27,7 @@ export default function LoginPage() {
         setChecking(false)
       }
     })()
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [navigate])
 
   async function handleSubmit(e) {
@@ -42,6 +41,7 @@ export default function LoginPage() {
         setSubmitting(false)
         return
       }
+      if (name.trim()) setDisplayName(name)
       navigate('/', { replace: true })
     } catch (err) {
       setError(err.message)
@@ -76,7 +76,21 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="fade-up" style={{ animationDelay: '0.1s' }}>
+        <form onSubmit={handleSubmit} className="space-y-4 fade-up" style={{ animationDelay: '0.1s' }}>
+          <label className="block">
+            <span className="block text-xs uppercase tracking-widest text-ink-400 mb-2">
+              Your name <span className="normal-case text-ink-300">(so we know who opens notes)</span>
+            </span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              className="w-full px-4 py-3 bg-white border border-ink-200 rounded-md text-ink-900 placeholder-ink-300 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition"
+              placeholder="e.g. Dina"
+            />
+          </label>
+
           <label className="block">
             <span className="block text-xs uppercase tracking-widest text-ink-400 mb-2">
               Access password
@@ -85,14 +99,13 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoFocus
               className="w-full px-4 py-3 bg-white border border-ink-200 rounded-md text-ink-900 placeholder-ink-300 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition"
               placeholder="Enter password"
             />
           </label>
 
           {error && (
-            <div className="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+            <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
               {error}
             </div>
           )}
@@ -100,7 +113,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting || !password}
-            className="mt-6 w-full px-6 py-3 bg-ink-900 text-ink-50 rounded-md font-medium tracking-wide hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            className="w-full px-6 py-3 bg-ink-900 text-ink-50 rounded-md font-medium tracking-wide hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
             {submitting ? 'Checking…' : 'Enter'}
           </button>

@@ -1,41 +1,35 @@
 rules_version = '2';
 
-// Security model for the Responsibility Center:
+// Open read/write on the responsibility-center collections.
+// Security model: a shared password (admin/viewer) gates the UI, plus URL
+// secrecy of the deployed Netlify site. Firestore itself is intentionally
+// open so the SPA can read/write without Firebase Auth.
 //
-// This is an internal tool with a single shared viewer password and a single
-// admin password. Authentication happens at the application layer (Firestore
-// holds hashed passwords in /config/auth, and the client compares the hash
-// of the entered password against them).
-//
-// Because there are no Firebase Auth users, these rules can't reference
-// request.auth. The site is intended to live behind a non-public URL and a
-// shared password — security comes from URL secrecy + the password gate, not
-// from Firestore rules.
-//
-// If you want stronger protection, you can:
-//   (a) move the site behind Netlify's password-protection feature
-//       (Site settings → Visitor access → Password protection — paid plan),
-//   (b) restrict the Firebase API key by HTTP referrer to your Netlify domain
-//       (Google Cloud Console → APIs & Credentials → Application restrictions),
-//   (c) or migrate to Firebase Auth with per-user accounts.
+// If you ever want to harden this, the upgrade path is:
+//  1. Turn on Firebase Auth (Anonymous or Email).
+//  2. Sign in anonymously after the password check in src/lib/auth.js.
+//  3. Replace `if true;` below with `if request.auth != null;`.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // /config/auth — holds the SHA-256 hashes of the viewer + admin passwords.
-    // Anyone with the URL needs to read this doc to check their entered password
-    // against the stored hashes. Writes are limited to clients that present the
-    // current admin password (enforced in the client; this rule is a no-op gate).
-    match /config/{configId} {
-      allow read: if true;
-      allow write: if true;
+    match /config/{doc} {
+      allow read, write: if true;
     }
-
-    // /tabs/* — the responsibility data. Read by anyone who got past the password.
-    // Writes happen from the admin panel only.
-    match /tabs/{tabId} {
-      allow read: if true;
-      allow write: if true;
+    match /tabs/{doc} {
+      allow read, write: if true;
+    }
+    match /responsibilities/{doc} {
+      allow read, write: if true;
+    }
+    match /tagCategories/{doc} {
+      allow read, write: if true;
+    }
+    match /tags/{doc} {
+      allow read, write: if true;
+    }
+    match /notes/{doc} {
+      allow read, write: if true;
     }
   }
 }

@@ -1,12 +1,24 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
-export default function Sidebar({ tabs, role, onLogout, onAdminPanel }) {
+export default function Sidebar({ tabs, role, displayName, openNotesCount, onLogout, onAdminPanel }) {
   const navigate = useNavigate()
-  const { tabId } = useParams()
+  const location = useLocation()
+  const path = location.pathname
+
+  function isActive(p) {
+    if (p === '/all') return path === '/all' || path.startsWith('/all')
+    if (p === '/notes') return path === '/notes' || path.startsWith('/notes')
+    return path === p
+  }
+
+  function activeTabId() {
+    const m = path.match(/^\/tab\/([^/]+)/)
+    return m ? m[1] : null
+  }
+  const tabId = activeTabId()
 
   return (
     <aside className="w-72 bg-ink-900 text-ink-100 flex flex-col h-screen sticky top-0">
-      {/* Header */}
       <div className="px-6 pt-8 pb-6 border-b border-ink-700">
         <div className="flex items-center gap-3 mb-1">
           <div className="w-8 h-8 rounded-md bg-accent/20 flex items-center justify-center">
@@ -21,10 +33,52 @@ export default function Sidebar({ tabs, role, onLogout, onAdminPanel }) {
         </p>
       </div>
 
-      {/* Tabs */}
+      {/* Top-level views */}
       <nav className="flex-1 overflow-y-auto py-4">
         <div className="px-4 mb-2 text-[10px] uppercase tracking-widest text-ink-400 font-medium">
-          People & Zones
+          Views
+        </div>
+        <ul className="space-y-0.5 px-2 mb-4">
+          <li>
+            <button
+              onClick={() => navigate('/all')}
+              className={`w-full text-left px-4 py-2.5 rounded-md transition flex items-center gap-3 ${
+                isActive('/all')
+                  ? 'bg-ink-700 text-ink-50'
+                  : 'text-ink-200 hover:bg-ink-800 hover:text-ink-50'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <span className="text-sm font-medium">All Responsibilities</span>
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => navigate('/notes')}
+              className={`w-full text-left px-4 py-2.5 rounded-md transition flex items-center gap-3 ${
+                isActive('/notes')
+                  ? 'bg-ink-700 text-ink-50'
+                  : 'text-ink-200 hover:bg-ink-800 hover:text-ink-50'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span className="text-sm font-medium">Notes & Requests</span>
+              {openNotesCount > 0 && (
+                <span className="ml-auto px-1.5 py-0.5 bg-accent text-white text-[10px] rounded-full font-bold">
+                  {openNotesCount}
+                </span>
+              )}
+            </button>
+          </li>
+        </ul>
+
+        <div className="px-4 mb-2 text-[10px] uppercase tracking-widest text-ink-400 font-medium">
+          People
         </div>
         <ul className="space-y-0.5 px-2">
           {tabs.map((tab) => {
@@ -39,24 +93,15 @@ export default function Sidebar({ tabs, role, onLogout, onAdminPanel }) {
                       : 'text-ink-200 hover:bg-ink-800 hover:text-ink-50'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className="w-1.5 h-6 rounded-full flex-shrink-0"
-                        style={{ background: tab.color || '#c46a3a' }}
-                      />
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{tab.name}</div>
-                        <div className="text-[11px] text-ink-400 truncate">
-                          {tab.role}
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="w-1.5 h-6 rounded-full flex-shrink-0"
+                      style={{ background: tab.color || '#c46a3a' }}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{tab.name}</div>
+                      <div className="text-[11px] text-ink-400 truncate">{tab.role}</div>
                     </div>
-                    {tab.contributionShare != null && (
-                      <span className="text-[10px] tabular text-ink-400 font-mono flex-shrink-0">
-                        {tab.contributionShare}%
-                      </span>
-                    )}
                   </div>
                 </button>
               </li>
@@ -65,7 +110,6 @@ export default function Sidebar({ tabs, role, onLogout, onAdminPanel }) {
         </ul>
       </nav>
 
-      {/* Footer */}
       <div className="px-4 py-4 border-t border-ink-700 space-y-1">
         {role === 'admin' && (
           <button
@@ -80,7 +124,8 @@ export default function Sidebar({ tabs, role, onLogout, onAdminPanel }) {
           </button>
         )}
         <div className="px-3 py-1 text-[11px] text-ink-400">
-          Role: <span className="font-mono uppercase">{role}</span>
+          {displayName && <span className="text-ink-200">{displayName} · </span>}
+          <span className="font-mono uppercase">{role}</span>
         </div>
         <button
           onClick={onLogout}

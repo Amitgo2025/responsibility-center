@@ -1,144 +1,113 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { getSession, logout } from './lib/auth'
+import { listTabs, listAllNotes } from './lib/db'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
+import AllResponsibilitiesPage from './pages/AllResponsibilitiesPage'
+import NotesPage from './pages/NotesPage'
 import Sidebar from './components/Sidebar'
 import TabView from './components/TabView'
 import AdminPanel from './components/AdminPanel'
-import { getSession, logout } from './lib/auth'
-import { listTabs } from './lib/db'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/setup" element={<SetupPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/*" element={<ProtectedShell />} />
+    </Routes>
+  )
+}
 
 function ProtectedShell() {
   const navigate = useNavigate()
-  const [session, setSession] = useState(() => getSession())
+  const location = useLocation()
+  const [session, setSession] = useState(undefined) // undefined = checking, null = signed out
   const [tabs, setTabs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showAdmin, setShowAdmin] = useState(false)
+  const [openNotesCount, setOpenNotesCount] = useState(0)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [error, setError] = useState('')
 
-  const refreshTabs = useCallback(async () => {
+  // Check session on mount and on path changes
+  useEffect(() => {
+    const s = getSession()
+    setSession(s)
+    if (!s) {
+      navigate('/login', { replace: true })
+    }
+  }, [navigate, location.pathname])
+
+  const refreshSidebar = useCallback(async () => {
     try {
-      const list = await listTabs()
-      setTabs(list)
+      const [t, notes] = await Promise.all([listTabs(), listAllNotes()])
+      setTabs(t)
+      setOpenNotesCount(notes.filter((n) => n.status === 'open').length)
       setError('')
     } catch (err) {
-      setError(`Could not load tabs: ${err.message}`)
+      setError(`Could not load: ${err.message}`)
     }
   }, [])
 
   useEffect(() => {
-    if (!session) {
-      navigate('/login', { replace: true })
-      return
-    }
-    let active = true
-    ;(async () => {
-      await refreshTabs()
-      if (active) setLoading(false)
-    })()
-    return () => {
-      active = false
-    }
-  }, [session, navigate, refreshTabs])
+    if (session) refreshSidebar()
+  }, [session, refreshSidebar])
 
   function handleLogout() {
     logout()
-    setSession(null)
     navigate('/login', { replace: true })
   }
 
-  if (!session) return null
-
-  if (loading) {
+  if (session === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper">
         <div className="text-ink-400 text-sm tracking-widest uppercase">Loading…</div>
       </div>
     )
   }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-paper p-8">
-        <div className="max-w-md text-center">
-          <p className="text-ink-700 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-ink-900 text-ink-50 rounded-md text-sm"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (tabs.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-paper p-8">
-        <div className="max-w-md text-center">
-          <h2 className="font-display text-3xl text-ink-900 mb-3">No tabs yet</h2>
-          <p className="text-ink-500 mb-6">
-            {session.role === 'admin'
-              ? 'Open admin settings to create your first tab.'
-              : 'Ask your admin to set up the system.'}
-          </p>
-          {session.role === 'admin' && (
-            <button
-              onClick={() => setShowAdmin(true)}
-              className="px-4 py-2 bg-ink-900 text-ink-50 rounded-md text-sm"
-            >
-              Open admin settings
-            </button>
-          )}
-          <button
-            onClick={handleLogout}
-            className="ml-2 px-4 py-2 bg-ink-100 text-ink-700 rounded-md text-sm"
-          >
-            Sign out
-          </button>
-        </div>
-        {showAdmin && (
-          <AdminPanel
-            tabs={tabs}
-            onClose={() => setShowAdmin(false)}
-            onTabsChanged={refreshTabs}
-          />
-        )}
-      </div>
-    )
-  }
+  if (!session) return null
 
   return (
-    <div className="flex bg-paper min-h-screen">
+    <div className="flex min-h-screen">
       <Sidebar
         tabs={tabs}
         role={session.role}
+        displayName={session.displayName}
+        openNotesCount={openNotesCount}
         onLogout={handleLogout}
-        onAdminPanel={() => setShowAdmin(true)}
+        onAdminPanel={() => setShowAdminPanel(true)}
       />
-      <Routes>
-        <Route path="/" element={<Navigate to={`/tab/${tabs[0].id}`} replace />} />
-        <Route path="/tab/:tabId" element={<TabView role={session.role} />} />
-        <Route path="*" element={<Navigate to={`/tab/${tabs[0].id}`} replace />} />
-      </Routes>
-      {showAdmin && (
+      <div className="flex-1 min-w-0">
+        {error && (
+          <div className="px-6 py-3 bg-red-50 border-b border-red-200 text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+        <Routes>
+          <Route path="/" element={<Navigate to="/all" replace />} />
+          <Route path="/all" element={<AllResponsibilitiesPage />} />
+          <Route path="/notes" element={<NotesPage role={session.role} />} />
+          <Route
+            path="/tab/:tabId"
+            element={
+              <TabView
+                role={session.role}
+                currentUser={session}
+                tabs={tabs}
+                onTabsChanged={refreshSidebar}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/all" replace />} />
+        </Routes>
+      </div>
+      {showAdminPanel && session.role === 'admin' && (
         <AdminPanel
           tabs={tabs}
-          onClose={() => setShowAdmin(false)}
-          onTabsChanged={refreshTabs}
+          onClose={() => setShowAdminPanel(false)}
+          onTabsChanged={refreshSidebar}
         />
       )}
     </div>
-  )
-}
-
-export default function App() {
-  return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/setup" element={<SetupPage />} />
-      <Route path="/*" element={<ProtectedShell />} />
-    </Routes>
   )
 }

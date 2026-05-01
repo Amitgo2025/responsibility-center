@@ -2,9 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
-}
+:root { color-scheme: light; }
 
 html, body, #root {
   height: 100%;
@@ -19,7 +17,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle paper texture for the background */
 .bg-paper {
   background-color: #f7f5f2;
   background-image:
@@ -27,66 +24,41 @@ body {
   background-size: 24px 24px;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #d4ccc0;
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #a89e91;
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4ccc0; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #a89e91; }
 
-/* Selection */
-::selection {
-  background: #c46a3a;
-  color: #f7f5f2;
-}
+::selection { background: #c46a3a; color: #f7f5f2; }
 
-/* Utility: editorial number */
-.tabular {
-  font-variant-numeric: tabular-nums;
-}
+.tabular { font-variant-numeric: tabular-nums; }
 
-/* Animation: stagger in */
 @keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+.fade-up { animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
-.fade-up {
-  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-/* Animation: side slide */
 @keyframes slideRight {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.slide-right { animation: slideRight 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* Tag chip styles */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  border: 1px solid;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
-.slide-right {
-  animation: slideRight 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-/* Print-friendly */
 @media print {
   .no-print { display: none !important; }
 }

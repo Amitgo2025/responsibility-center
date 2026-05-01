@@ -1,11 +1,10 @@
 import { db } from './firebase'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 
-// Storage keys for session
 const SESSION_KEY = 'rc_session'
 const ROLE_KEY = 'rc_role'
+const NAME_KEY = 'rc_name'
 
-// Hash function — SHA-256 via SubtleCrypto
 async function hash(text) {
   const data = new TextEncoder().encode(text)
   const buffer = await crypto.subtle.digest('SHA-256', data)
@@ -14,7 +13,6 @@ async function hash(text) {
     .join('')
 }
 
-// Get the auth doc (creates it on first read if missing)
 export async function getAuthConfig() {
   const ref = doc(db, 'config', 'auth')
   const snap = await getDoc(ref)
@@ -22,12 +20,11 @@ export async function getAuthConfig() {
   return snap.data()
 }
 
-// Initialize: only allowed when no auth doc exists yet (bootstrap)
 export async function initializeAuth(viewerPassword, adminPassword) {
   const ref = doc(db, 'config', 'auth')
   const existing = await getDoc(ref)
   if (existing.exists()) {
-    throw new Error('System is already initialized. Use the admin panel to change passwords.')
+    throw new Error('System is already initialized.')
   }
   if (!viewerPassword || viewerPassword.length < 4) {
     throw new Error('Viewer password must be at least 4 characters')
@@ -48,7 +45,6 @@ export async function initializeAuth(viewerPassword, adminPassword) {
   })
 }
 
-// Login attempt — returns role: 'admin' | 'viewer' | null
 export async function tryLogin(password) {
   const config = await getAuthConfig()
   if (!config) return null
@@ -66,16 +62,25 @@ export async function tryLogin(password) {
   return null
 }
 
+export function setDisplayName(name) {
+  if (name && name.trim()) {
+    sessionStorage.setItem(NAME_KEY, name.trim())
+  }
+}
+
 export function getSession() {
   const has = sessionStorage.getItem(SESSION_KEY) === '1'
-  const role = sessionStorage.getItem(ROLE_KEY)
   if (!has) return null
-  return { role: role || 'viewer' }
+  return {
+    role: sessionStorage.getItem(ROLE_KEY) || 'viewer',
+    displayName: sessionStorage.getItem(NAME_KEY) || '',
+  }
 }
 
 export function logout() {
   sessionStorage.removeItem(SESSION_KEY)
   sessionStorage.removeItem(ROLE_KEY)
+  sessionStorage.removeItem(NAME_KEY)
 }
 
 export async function changePasswords({ currentAdminPassword, newViewerPassword, newAdminPassword }) {
@@ -94,7 +99,6 @@ export async function changePasswords({ currentAdminPassword, newViewerPassword,
     if (newAdminPassword.length < 6) throw new Error('Admin password must be at least 6 characters')
     update.adminHash = await hash(newAdminPassword)
   }
-  // Make sure they don't end up identical
   const finalViewerHash = update.viewerHash || config.viewerHash
   const finalAdminHash = update.adminHash || config.adminHash
   if (finalViewerHash === finalAdminHash) {

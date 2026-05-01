@@ -21,7 +21,6 @@ export default function SetupPage() {
         const config = await getAuthConfig()
         if (!active) return
         if (config) {
-          // Already initialized — kick to login
           navigate('/login', { replace: true })
           return
         }
@@ -33,9 +32,7 @@ export default function SetupPage() {
         setChecking(false)
       }
     })()
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [navigate])
 
   async function handleSubmit(e) {
@@ -65,7 +62,6 @@ export default function SetupPage() {
       </div>
     )
   }
-
   if (!allowed) return null
 
   return (
@@ -77,15 +73,15 @@ export default function SetupPage() {
           </span>
           <h1 className="font-display text-4xl text-ink-900 mb-3">Set up your access</h1>
           <p className="text-ink-500 leading-relaxed">
-            Two passwords run the system. The viewer password lets the team open the site read-only.
-            The admin password lets you edit responsibilities and manage settings. Pick something you
-            can remember — there is no recovery.
+            Two passwords run the system. The viewer password lets the team open the site read-only
+            (and open notes for you). The admin password lets you edit everything. Pick something
+            you can remember — there is no recovery.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6 fade-up" style={{ animationDelay: '0.1s' }}>
-          <div className="bg-white border border-ink-200 rounded-lg p-6">
-            <label className="block mb-4">
+          <div className="bg-white border border-ink-200 rounded-lg p-6 space-y-4">
+            <label className="block">
               <span className="block text-xs uppercase tracking-widest text-ink-400 mb-2">
                 Viewer password — for everyone on the team
               </span>
@@ -96,12 +92,9 @@ export default function SetupPage() {
                 className="w-full px-4 py-3 bg-ink-50 border border-ink-200 rounded-md text-ink-900 font-mono focus:outline-none focus:ring-2 focus:ring-accent transition"
                 placeholder="At least 4 characters"
               />
-              <span className="block mt-2 text-xs text-ink-400">
-                Anyone with this can see the site, but cannot edit.
-              </span>
             </label>
 
-            <label className="block mb-4">
+            <label className="block">
               <span className="block text-xs uppercase tracking-widest text-ink-400 mb-2">
                 Admin password — for you only
               </span>
@@ -112,9 +105,6 @@ export default function SetupPage() {
                 className="w-full px-4 py-3 bg-ink-50 border border-ink-200 rounded-md text-ink-900 font-mono focus:outline-none focus:ring-2 focus:ring-accent transition"
                 placeholder="At least 6 characters"
               />
-              <span className="block mt-2 text-xs text-ink-400">
-                Edits, manages users, changes passwords. Don't share this one.
-              </span>
             </label>
 
             <label className="block">
@@ -141,8 +131,8 @@ export default function SetupPage() {
             <div>
               <div className="font-medium text-ink-900">Load the team data</div>
               <div className="text-sm text-ink-500 mt-1">
-                Imports all 7 tabs (Amit, Dina, Elran, Or, Elad, Yoav, Cross-Cutting) with the
-                responsibilities from your team restructure docs and your operations list.
+                Imports 6 people, 3 tag categories (Platform, Type, Frequency), 24 ready-made tags,
+                and all responsibilities from your team restructure docs and operations list.
               </div>
             </div>
           </label>

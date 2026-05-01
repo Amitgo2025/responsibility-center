@@ -273,6 +273,9 @@ export async function deleteNote(id) {
 //   - 'custom'     : explicit per-date assignments (handled via assignments map)
 // Assignments map: { 'YYYY-MM-DD': 'personId' } — which person owns that date.
 // If no assignment exists for a generated date, it shows up as "unassigned".
+//
+// deadlineTime: 'HH:MM' string in Israel timezone (Asia/Jerusalem). Optional.
+// When set, an instance becomes "missed" if not closed by deadline.
 
 export async function listScheduleTasks() {
   const snap = await getDocs(collection(db, 'scheduleTasks'))
@@ -293,6 +296,7 @@ export async function createScheduleTask(data) {
     dates: data.dates || [], // for 'dates'
     assignments: data.assignments || {}, // map of { 'YYYY-MM-DD': 'personId' }
     color: data.color || '#c46a3a',
+    deadlineTime: data.deadlineTime || '', // 'HH:MM' Israel time, '' = no deadline
     active: data.active !== false,
     sortOrder: maxOrder + 1,
     createdAt: new Date().toISOString(),
@@ -307,6 +311,33 @@ export async function updateScheduleTask(id, patch) {
     ...patch,
     updatedAt: new Date().toISOString(),
   })
+  // If deadlineTime changed, propagate to today's open instance for this template
+  if ('deadlineTime' in patch) {
+    const today = todayDateString()
+    const snap = await getDocs(
+      query(
+        collection(db, 'taskInstances'),
+        where('templateId', '==', id),
+        where('date', '==', today),
+      ),
+    )
+    const updates = []
+    snap.forEach((d) => {
+      const data = d.data()
+      if (data.status === 'open') {
+        const newDeadline = patch.deadlineTime
+          ? computeDeadlineISOSimple(today, patch.deadlineTime)
+          : null
+        updates.push(
+          updateDoc(doc(db, 'taskInstances', d.id), {
+            deadline: newDeadline,
+            deadlineTime: patch.deadlineTime || '',
+          }),
+        )
+      }
+    })
+    await Promise.all(updates)
+  }
 }
 
 export async function deleteScheduleTask(id) {
@@ -357,6 +388,8 @@ export async function createTaskInstance(data) {
     date: data.date, // 'YYYY-MM-DD'
     personId: data.personId || '',
     color: data.color || '#c46a3a',
+    deadline: data.deadline || null, // ISO string, computed from deadlineTime + date in Israel TZ
+    deadlineTime: data.deadlineTime || '', // 'HH:MM' for display
     status: 'open',
     closedBy: null,
     closedAt: null,
@@ -366,12 +399,31 @@ export async function createTaskInstance(data) {
   return { id: ref.id, ...payload }
 }
 
-export async function closeTaskInstance(id, closer) {
+export async function closeTaskInstance(id, closer, device) {
   await updateDoc(doc(db, 'taskInstances', id), {
     status: 'closed',
     closedBy: closer || 'unknown',
     closedAt: new Date().toISOString(),
+    closedDevice: device || '',
   })
+}
+
+// Detects the rough device type from the browser's user-agent string.
+// Returns: 'Mobile' | 'Tablet' | 'Desktop'.
+export function detectDeviceType() {
+  if (typeof navigator === 'undefined') return 'Desktop'
+  const ua = navigator.userAgent || ''
+  // iPad on iPadOS 13+ identifies as Macintosh with touch — catch it via touch points
+  const iPadLike =
+    /iPad/i.test(ua) ||
+    (typeof navigator !== 'undefined' &&
+      navigator.platform === 'MacIntel' &&
+      navigator.maxTouchPoints > 1)
+  if (iPadLike) return 'Tablet'
+  if (/Tablet|PlayBook|Silk/i.test(ua)) return 'Tablet'
+  if (/Android/i.test(ua) && !/Mobile/i.test(ua)) return 'Tablet'
+  if (/Mobi|Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return 'Mobile'
+  return 'Desktop'
 }
 
 export async function reopenTaskInstance(id) {
@@ -382,8 +434,85 @@ export async function reopenTaskInstance(id) {
   })
 }
 
+export async function reassignTaskInstance(id, newPersonId) {
+  await updateDoc(doc(db, 'taskInstances', id), {
+    personId: newPersonId || '',
+    reassignedAt: new Date().toISOString(),
+  })
+}
+
 export async function deleteTaskInstance(id) {
   await deleteDoc(doc(db, 'taskInstances', id))
+}
+
+// Compute the effective status of an instance — including 'missed' if past deadline
+// while still open. Returns: 'closed' | 'missed' | 'open' (open with deadline) | 'open'.
+export function effectiveStatus(instance, now) {
+  if (instance.status === 'closed') return 'closed'
+  if (instance.deadline) {
+    const deadlineDate = new Date(instance.deadline)
+    if ((now || new Date()) > deadlineDate) return 'missed'
+  }
+  return 'open'
+}
+
+// Compute the deadline ISO string given a date 'YYYY-MM-DD' and time 'HH:MM' in Israel time.
+// Israel is UTC+2 (winter) or UTC+3 (summer) — DST handled via Intl with Asia/Jerusalem.
+export function computeDeadlineISO(dateStr, timeStr) {
+  return computeDeadlineISOSimple(dateStr, timeStr)
+}
+
+// Robust deadline computation: find the UTC instant whose Asia/Jerusalem clock equals
+// dateStr at HH:MM. Handles DST by iteratively correcting based on the wall clock the
+// guess produces.
+function computeDeadlineISOSimple(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null
+  const [hh, mm] = timeStr.split(':').map((x) => parseInt(x, 10))
+  if (isNaN(hh) || isNaN(mm)) return null
+  const [y, mo, d] = dateStr.split('-').map((x) => parseInt(x, 10))
+  // Initial guess: treat the wall clock as UTC, then adjust.
+  let guess = Date.UTC(y, mo - 1, d, hh, mm, 0)
+  for (let i = 0; i < 3; i++) {
+    const wallInIsrael = new Date(guess).toLocaleString('en-CA', {
+      timeZone: 'Asia/Jerusalem',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    const m = wallInIsrael.match(/(\d{4})-(\d{2})-(\d{2})[, ]+(\d{1,2}):(\d{2})/)
+    if (!m) break
+    const wY = parseInt(m[1], 10)
+    const wMo = parseInt(m[2], 10)
+    const wD = parseInt(m[3], 10)
+    const wH = parseInt(m[4], 10)
+    const wMi = parseInt(m[5], 10)
+    const targetMins = (((y * 12) + mo) * 31 + d) * 24 * 60 + hh * 60 + mm
+    const guessMins = (((wY * 12) + wMo) * 31 + wD) * 24 * 60 + wH * 60 + wMi
+    const diff = (targetMins - guessMins) * 60 * 1000
+    if (Math.abs(diff) < 1000) break
+    guess += diff
+  }
+  return new Date(guess).toISOString()
+}
+
+// Format a Date as Israel local time string for display
+export function formatIsraelTime(isoOrDate, opts = {}) {
+  if (!isoOrDate) return ''
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate
+  const showSeconds = opts.seconds === true
+  return d.toLocaleString('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: showSeconds ? '2-digit' : undefined,
+    hour12: false,
+  })
 }
 
 // Make sure today's task instances exist — call once on app load.
@@ -405,12 +534,17 @@ export async function ensureTodayInstances() {
     if (existingTplIds.has(tpl.id)) continue
     if (!shouldRunOn(tpl, today, dayOfWeek)) continue
     const personId = tpl.assignments?.[today] || ''
+    const deadline = tpl.deadlineTime
+      ? computeDeadlineISOSimple(today, tpl.deadlineTime)
+      : null
     const inst = await createTaskInstance({
       templateId: tpl.id,
       name: tpl.name,
       date: today,
       personId,
       color: tpl.color || '#c46a3a',
+      deadline,
+      deadlineTime: tpl.deadlineTime || '',
     })
     created.push(inst)
   }
@@ -433,11 +567,22 @@ export function shouldRunOn(template, dateStr, dayOfWeek) {
 }
 
 export function todayDateString() {
+  // Returns 'YYYY-MM-DD' for the current date in Israel timezone
   const d = new Date()
+  const parts = d.toLocaleString('en-CA', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  // en-CA gives 'YYYY-MM-DD'
+  const m = parts.match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  // Fallback to local
   const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return `${y}-${mo}-${day}`
 }
 
 // Generate the upcoming dates a template will run, between dateFrom and dateTo

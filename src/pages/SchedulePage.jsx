@@ -196,7 +196,18 @@ function TaskRow({ task, tabs, isAdmin, onEdit, onAssign, onDelete, onToggleActi
           />
           <div className="min-w-0">
             <h3 className="font-medium text-ink-900 text-lg leading-tight">{task.name}</h3>
-            <div className="text-xs text-ink-500 mt-0.5">{cadenceLabel()}</div>
+            <div className="text-xs text-ink-500 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>{cadenceLabel()}</span>
+              {task.deadlineTime && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded font-mono">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  by {task.deadlineTime}
+                </span>
+              )}
+            </div>
             {task.description && (
               <p className="text-sm text-ink-600 mt-1 line-clamp-2">{task.description}</p>
             )}
@@ -273,6 +284,7 @@ function TaskEditor({ task, onClose, onSaved }) {
   const [daysOfWeek, setDaysOfWeek] = useState(task?.daysOfWeek || [])
   const [dates, setDates] = useState(task?.dates || [])
   const [color, setColor] = useState(task?.color || '#c46a3a')
+  const [deadlineTime, setDeadlineTime] = useState(task?.deadlineTime || '')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -303,6 +315,7 @@ function TaskEditor({ task, onClose, onSaved }) {
         daysOfWeek: cadence === 'weekly' ? daysOfWeek : [],
         dates: cadence === 'dates' ? dates : [],
         color,
+        deadlineTime: deadlineTime || '',
       }
       if (isCreate) {
         await createScheduleTask(payload)
@@ -446,6 +459,32 @@ function TaskEditor({ task, onClose, onSaved }) {
                   style={{ background: c }}
                 />
               ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-ink-400 mb-1.5 font-medium">
+              Deadline (Israel time, optional)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={deadlineTime}
+                onChange={(e) => setDeadlineTime(e.target.value)}
+                className="px-3 py-2 bg-white border border-ink-200 rounded text-ink-900 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+              />
+              {deadlineTime && (
+                <button
+                  type="button"
+                  onClick={() => setDeadlineTime('')}
+                  className="text-xs text-ink-500 hover:text-red-600"
+                >
+                  Clear
+                </button>
+              )}
+              <span className="text-xs text-ink-400">
+                After this hour an unfinished task is logged as <span className="text-red-600 font-medium">missed</span>.
+              </span>
             </div>
           </div>
 

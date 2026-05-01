@@ -14,6 +14,7 @@ import ResponsibilityRow from './ResponsibilityRow'
 import ResponsibilityEditor from './ResponsibilityEditor'
 import NoteDialog from './NoteDialog'
 import NotesViewer from './NotesViewer'
+import TodayScheduleBanner from './TodayScheduleBanner'
 
 export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
   const { tabId } = useParams()
@@ -215,6 +216,9 @@ export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
       </header>
 
       <div className="px-10 py-10 max-w-5xl space-y-12">
+        {/* Today's tasks banner — only renders if this person has tasks today */}
+        <TodayScheduleBanner currentUser={currentUser} role={role} personId={tabId} />
+
         <Section
           title="Media Buying Tasks"
           subtitle="Ongoing target tasks — the lanes from the team structure"

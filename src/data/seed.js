@@ -1,0 +1,318 @@
+// Default seed data for the Responsibility Center
+// Each tab represents a person or shared zone. Items are individual responsibilities.
+//
+// Status options: 'active' | 'review' | 'transitioning'
+// (Free text in 'notes' for context, partners, frequency, etc.)
+
+export const defaultData = [
+  {
+    id: 'amit',
+    name: 'Amit',
+    role: 'Operations & Coordination',
+    contributionShare: null,
+    color: '#1c1815',
+    sortOrder: 0,
+    items: [
+      {
+        id: 'amit_1',
+        title: 'Reports — sample checks for anomalies',
+        notes: 'Including against the Tonic account. Spot-check for irregularities or unusual patterns.',
+        status: 'active',
+      },
+      {
+        id: 'amit_2',
+        title: 'Google sources',
+        notes: 'Owning the source pipeline for Google.',
+        status: 'active',
+      },
+      {
+        id: 'amit_3',
+        title: 'MediaGo sources (manual)',
+        notes: 'Manual source handling for MediaGo platform.',
+        status: 'active',
+      },
+      {
+        id: 'amit_4',
+        title: 'Bulks — schedule, task & bid updates, Q&A',
+        notes: 'Preparing the schedule, updating tasks and bids, answering questions from buyers.',
+        status: 'active',
+      },
+      {
+        id: 'amit_5',
+        title: 'Buyer supplier checks',
+        notes: 'Checking suppliers used by the buyers.',
+        status: 'active',
+      },
+      {
+        id: 'amit_6',
+        title: 'Compliance',
+        notes: 'In principle handed off to the buyers yesterday — hopefully they sort it. Watching for issues.',
+        status: 'transitioning',
+      },
+      {
+        id: 'amit_7',
+        title: 'Opt — rule checks, changes, cleanups',
+        notes: 'Reviewing optimization rules, modifying when needed, cleaning up where required.',
+        status: 'active',
+      },
+      {
+        id: 'amit_8',
+        title: 'Opt Mid-Day Facebook (Tue & Thu)',
+        notes: '3:00 PM and 8:00 PM on Tuesdays and Thursdays.',
+        status: 'active',
+      },
+      {
+        id: 'amit_9',
+        title: 'Buyer schedule — Opt, Compliance, etc.',
+        notes: 'Owning the buyer-facing schedule across opt, compliance and related streams.',
+        status: 'active',
+      },
+      {
+        id: 'amit_10',
+        title: 'Policy Q&A for buyers',
+        notes: 'First point of contact for buyer policy questions.',
+        status: 'active',
+      },
+      {
+        id: 'amit_11',
+        title: 'Google & Taboola accounts',
+        notes: 'When needed — account-side issues or setup.',
+        status: 'active',
+      },
+      {
+        id: 'amit_12',
+        title: 'Tonic incidents',
+        notes: 'E.g. Popin issues, account releases when you are not available.',
+        status: 'active',
+      },
+      {
+        id: 'amit_13',
+        title: 'Issue routing to Carmel & Oz',
+        notes: 'Triage and forwarding incidents to the right person.',
+        status: 'active',
+      },
+      {
+        id: 'amit_14',
+        title: 'Carmel & Oz request intake → Topics',
+        notes: 'Centralize their incoming requests and feed them into Topics.',
+        status: 'active',
+      },
+      {
+        id: 'amit_15',
+        title: 'Morning syncs',
+        notes: 'Daily morning calls with the team.',
+        status: 'active',
+      },
+      {
+        id: 'amit_16',
+        title: 'MediaGo finance — balance & transfers',
+        notes: 'Confirm sufficient balance, move budget between accounts.',
+        status: 'active',
+      },
+    ],
+  },
+  {
+    id: 'dina',
+    name: 'Dina',
+    role: 'Research & Fast Execution',
+    contributionShare: 23,
+    color: '#c46a3a',
+    sortOrder: 1,
+    items: [
+      {
+        id: 'dina_1',
+        title: 'SUB NICHES',
+        notes: 'With Elran. Deep research into new niches — the discovery work that opens up what the team scales next. Dina on research depth, Elran on the scale-side perspective.',
+        status: 'active',
+      },
+      {
+        id: 'dina_2',
+        title: 'DAILY RESEARCH',
+        notes: 'With Or and Yoav. The daily flow of new ideas and close-to-revenue opportunities. Dina on research instinct, Or on near-opportunity sharpness, Yoav on tooling.',
+        status: 'active',
+      },
+      {
+        id: 'dina_3',
+        title: 'DAILY FAST',
+        notes: 'With Yoav. Fast execution on opportunities — turning ideas into live activity quickly. Dina drives the daily flow, Yoav supports with tools.',
+        status: 'active',
+      },
+    ],
+  },
+  {
+    id: 'elran',
+    name: 'Elran',
+    role: 'Scale & Replication Lead',
+    contributionShare: 23,
+    color: '#3a342e',
+    sortOrder: 2,
+    items: [
+      {
+        id: 'elran_1',
+        title: 'SUB NICHES',
+        notes: 'With Dina. Scale-side lens — knowing what is worth pursuing further once Dina finds it.',
+        status: 'active',
+      },
+      {
+        id: 'elran_2',
+        title: 'SCALE ME',
+        notes: 'With Or. Taking proven concepts and expanding them. Recently the strongest lane on the team in revenue.',
+        status: 'active',
+      },
+      {
+        id: 'elran_3',
+        title: 'SISTERS',
+        notes: 'With Elad. Pure replication — what works on one feed onto other feeds. Elran on scale execution, Elad on creative quality.',
+        status: 'active',
+      },
+      {
+        id: 'elran_4',
+        title: 'COMPETITORS',
+        notes: 'With Elad. Pulling signal from the market and converting it into scale plays. Elad on what is worth replicating, Elran on execution.',
+        status: 'active',
+      },
+    ],
+  },
+  {
+    id: 'or',
+    name: 'Or',
+    role: 'Scale & Near-Opportunity Research',
+    contributionShare: 23,
+    color: '#544c43',
+    sortOrder: 3,
+    items: [
+      {
+        id: 'or_1',
+        title: 'DAILY RESEARCH',
+        notes: 'With Dina and Yoav. Sharp eye for what is about to work — most engaged in day-to-day. Dina on research depth, Yoav on tooling.',
+        status: 'active',
+      },
+      {
+        id: 'or_2',
+        title: 'SCALE ME',
+        notes: 'With Elran. Strongest performer on scale work and team leader on profitability. Home lane.',
+        status: 'active',
+      },
+    ],
+  },
+  {
+    id: 'elad',
+    name: 'Elad',
+    role: 'Replication & Automation Quality',
+    contributionShare: 15.5,
+    color: '#7a7165',
+    sortOrder: 4,
+    items: [
+      {
+        id: 'elad_1',
+        title: 'SISTERS',
+        notes: 'With Elran. Pattern-recognition work — creative eye on what is worth replicating across feeds.',
+        status: 'active',
+      },
+      {
+        id: 'elad_2',
+        title: 'COMPETITORS',
+        notes: 'With Elran. Judgment on which competitor creatives and concepts are worth replicating.',
+        status: 'active',
+      },
+      {
+        id: 'elad_3',
+        title: 'EXP',
+        notes: 'Solo lane. Working through existing articles — filtering and finding what has not been activated yet.',
+        status: 'active',
+      },
+      {
+        id: 'elad_4',
+        title: 'Bulk & Creative Quality (Automation Team)',
+        notes: 'Solo lane. The automation team (Matan, Omer, Or Shmueli) runs high-volume bulk work; Elad monitors and improves the quality of both creatives and bulk tasks. Defined zone of impact across volume output.',
+        status: 'active',
+      },
+    ],
+  },
+  {
+    id: 'yoav',
+    name: 'Yoav',
+    role: 'Research & Fast Execution Support',
+    contributionShare: 15.5,
+    color: '#a89e91',
+    sortOrder: 5,
+    items: [
+      {
+        id: 'yoav_1',
+        title: 'DAILY RESEARCH',
+        notes: 'With Dina and Or. Tools side — building things that make research and follow-up faster. Tooling as a force multiplier for the lane.',
+        status: 'active',
+      },
+      {
+        id: 'yoav_2',
+        title: 'DAILY FAST',
+        notes: 'With Dina. Tools and systems to support fast turnaround. Dina drives the daily flow, Yoav makes it run faster.',
+        status: 'active',
+      },
+      {
+        id: 'yoav_3',
+        title: 'YouTube channel project',
+        notes: 'Parallel project outside the media team — part of why the media-team share reflects the proportion of focus there.',
+        status: 'active',
+      },
+    ],
+  },
+  {
+    id: 'shared',
+    name: 'Cross-Cutting',
+    role: 'Tasks with multiple owners',
+    contributionShare: null,
+    color: '#a8501f',
+    sortOrder: 6,
+    items: [
+      {
+        id: 'shared_1',
+        title: 'SUB NICHES',
+        notes: 'Owners: Dina + Elran. Deep research into new niches.',
+        status: 'active',
+      },
+      {
+        id: 'shared_2',
+        title: 'DAILY RESEARCH',
+        notes: 'Owners: Dina + Or + Yoav. Daily flow of new ideas and close-to-revenue opportunities.',
+        status: 'active',
+      },
+      {
+        id: 'shared_3',
+        title: 'DAILY FAST',
+        notes: 'Owners: Dina + Yoav. Fast execution on opportunities.',
+        status: 'active',
+      },
+      {
+        id: 'shared_4',
+        title: 'SCALE ME',
+        notes: 'Owners: Elran + Or. Taking proven concepts and expanding them.',
+        status: 'active',
+      },
+      {
+        id: 'shared_5',
+        title: 'SISTERS',
+        notes: 'Owners: Elran + Elad. Replicating what works on one feed onto other feeds.',
+        status: 'active',
+      },
+      {
+        id: 'shared_6',
+        title: 'COMPETITORS',
+        notes: 'Owners: Elran + Elad. Analyzing competitor data and pulling market signal.',
+        status: 'active',
+      },
+      {
+        id: 'shared_7',
+        title: 'EXP',
+        notes: 'Owner: Elad. Working through existing articles — filtering and finding unactivated ones.',
+        status: 'active',
+      },
+      {
+        id: 'shared_8',
+        title: 'Bulk & Creative Quality (Automation Team)',
+        notes: 'Owner: Elad. Quality control across automation team output (Matan, Omer, Or Shmueli).',
+        status: 'active',
+      },
+    ],
+  },
+]

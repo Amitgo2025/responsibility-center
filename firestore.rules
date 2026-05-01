@@ -37,5 +37,14 @@ service cloud.firestore {
     match /taskInstances/{doc} {
       allow read, write: if true;
     }
+    match /dailyPlans/{doc} {
+      allow read, write: if true;
+    }
+    match /dailyUpdates/{doc} {
+      allow read, write: if true;
+    }
+    match /chatMessages/{doc} {
+      allow read, write: if true;
+    }
   }
 }

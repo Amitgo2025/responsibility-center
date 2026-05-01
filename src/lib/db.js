@@ -602,6 +602,171 @@ export function generateScheduledDates(template, dateFrom, dateTo) {
   return result
 }
 
+// ============== DAILY PLANS (morning planning) ==============
+// One plan per person per date. Status flow:
+//   - 'planning'  : being filled in (we never store this — only sent state is saved)
+//   - 'submitted' : team member sent their morning plan
+//   - 'closed'    : team member added end-of-day feedback the next morning
+// Lines: array of { lane, platforms, notes }
+//   lane is one of the predefined lanes (SUB NICHES / DAILY RESEARCH / etc) plus 'Other'
+
+export const PLAN_LANES = [
+  'SUB NICHES',
+  'DAILY RESEARCH',
+  'DAILY FAST',
+  'SCALE ME',
+  'SISTERS',
+  'COMPETITORS',
+  'EXP',
+  'Bulk & Creative Quality',
+  'Other',
+]
+
+export async function listDailyPlans(opts = {}) {
+  // opts: { personId, date, dateFrom, dateTo }
+  let q = collection(db, 'dailyPlans')
+  const constraints = []
+  if (opts.personId) constraints.push(where('personId', '==', opts.personId))
+  if (opts.date) constraints.push(where('date', '==', opts.date))
+  if (constraints.length) q = query(q, ...constraints)
+  const snap = await getDocs(q)
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  if (opts.dateFrom || opts.dateTo) {
+    return items.filter((i) => {
+      if (opts.dateFrom && i.date < opts.dateFrom) return false
+      if (opts.dateTo && i.date > opts.dateTo) return false
+      return true
+    })
+  }
+  return items
+}
+
+export async function getDailyPlan(personId, date) {
+  const snap = await getDocs(
+    query(
+      collection(db, 'dailyPlans'),
+      where('personId', '==', personId),
+      where('date', '==', date),
+    ),
+  )
+  if (snap.empty) return null
+  const d = snap.docs[0]
+  return { id: d.id, ...d.data() }
+}
+
+// Submit a new morning plan
+export async function submitDailyPlan(data) {
+  const payload = {
+    personId: data.personId,
+    date: data.date, // 'YYYY-MM-DD'
+    lines: data.lines || [], // [{ lane, platforms: [tagId], notes }]
+    status: 'submitted',
+    submittedAt: new Date().toISOString(),
+    submittedBy: data.submittedBy || '',
+    feedback: '', // filled in next morning
+    closedAt: null,
+    closedBy: null,
+  }
+  const ref = await addDoc(collection(db, 'dailyPlans'), payload)
+  return { id: ref.id, ...payload }
+}
+
+// Add end-of-day feedback (closes a previously-submitted plan)
+export async function closeDailyPlan(planId, feedback, closedBy) {
+  await updateDoc(doc(db, 'dailyPlans', planId), {
+    status: 'closed',
+    feedback: feedback || '',
+    closedAt: new Date().toISOString(),
+    closedBy: closedBy || '',
+  })
+}
+
+// Get the most recent un-closed plan for a person — needs feedback to be added
+export async function getOpenPlanForPerson(personId) {
+  const snap = await getDocs(
+    query(
+      collection(db, 'dailyPlans'),
+      where('personId', '==', personId),
+      where('status', '==', 'submitted'),
+    ),
+  )
+  if (snap.empty) return null
+  // Most recent first
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  items.sort((a, b) => b.date.localeCompare(a.date))
+  return items[0]
+}
+
+// ============== DAILY UPDATES (admin announcements) ==============
+// One global update message per day (at most). Replacing the message overwrites
+// the document for that date.
+
+export async function getDailyUpdate(date) {
+  const ref = doc(db, 'dailyUpdates', date)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() }
+}
+
+export async function getTodayUpdate() {
+  return getDailyUpdate(todayDateString())
+}
+
+export async function setDailyUpdate(date, message, author) {
+  await setDoc(doc(db, 'dailyUpdates', date), {
+    message: message || '',
+    author: author || '',
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+export async function clearDailyUpdate(date) {
+  await deleteDoc(doc(db, 'dailyUpdates', date))
+}
+
+export async function listDailyUpdates(dateFrom, dateTo) {
+  const snap = await getDocs(collection(db, 'dailyUpdates'))
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  return items.filter((i) => {
+    if (dateFrom && i.id < dateFrom) return false
+    if (dateTo && i.id > dateTo) return false
+    return true
+  }).sort((a, b) => b.id.localeCompare(a.id))
+}
+
+// ============== CHAT (group chat) ==============
+// Single shared chat. Messages are appended; nobody can delete except admin.
+
+export async function listChatMessages(opts = {}) {
+  const snap = await getDocs(collection(db, 'chatMessages'))
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  items.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  if (opts.limit) {
+    return items.slice(-opts.limit)
+  }
+  return items
+}
+
+export async function sendChatMessage(text, author, authorRole) {
+  if (!text || !text.trim()) throw new Error('Message is empty')
+  const payload = {
+    text: text.trim(),
+    author: author || 'anonymous',
+    authorRole: authorRole || 'viewer',
+    createdAt: new Date().toISOString(),
+  }
+  const ref = await addDoc(collection(db, 'chatMessages'), payload)
+  return { id: ref.id, ...payload }
+}
+
+export async function deleteChatMessage(id) {
+  await deleteDoc(doc(db, 'chatMessages', id))
+}
+
 // ============== SEED ==============
 export async function seedDefaultData() {
   const now = new Date().toISOString()

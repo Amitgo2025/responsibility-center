@@ -8,6 +8,7 @@ import AllResponsibilitiesPage from './pages/AllResponsibilitiesPage'
 import NotesPage from './pages/NotesPage'
 import SchedulePage from './pages/SchedulePage'
 import ScheduleHistoryPage from './pages/ScheduleHistoryPage'
+import ChatPage, { getUnreadChatCount } from './pages/ChatPage'
 import Sidebar from './components/Sidebar'
 import TabView from './components/TabView'
 import AdminPanel from './components/AdminPanel'
@@ -28,6 +29,7 @@ function ProtectedShell() {
   const [session, setSession] = useState(undefined) // undefined = checking, null = signed out
   const [tabs, setTabs] = useState([])
   const [openNotesCount, setOpenNotesCount] = useState(0)
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [error, setError] = useState('')
 
@@ -42,9 +44,14 @@ function ProtectedShell() {
 
   const refreshSidebar = useCallback(async () => {
     try {
-      const [t, notes] = await Promise.all([listTabs(), listAllNotes()])
+      const [t, notes, unread] = await Promise.all([
+        listTabs(),
+        listAllNotes(),
+        getUnreadChatCount(),
+      ])
       setTabs(t)
       setOpenNotesCount(notes.filter((n) => n.status === 'open').length)
+      setUnreadChatCount(unread)
       setError('')
     } catch (err) {
       setError(`Could not load: ${err.message}`)
@@ -53,7 +60,7 @@ function ProtectedShell() {
 
   useEffect(() => {
     if (session) refreshSidebar()
-  }, [session, refreshSidebar])
+  }, [session, refreshSidebar, location.pathname])
 
   function handleLogout() {
     logout()
@@ -76,6 +83,7 @@ function ProtectedShell() {
         role={session.role}
         displayName={session.displayName}
         openNotesCount={openNotesCount}
+        unreadChatCount={unreadChatCount}
         onLogout={handleLogout}
         onAdminPanel={() => setShowAdminPanel(true)}
       />
@@ -94,6 +102,10 @@ function ProtectedShell() {
           <Route path="/notes" element={<NotesPage role={session.role} />} />
           <Route path="/schedule" element={<SchedulePage role={session.role} />} />
           <Route path="/history" element={<ScheduleHistoryPage role={session.role} />} />
+          <Route
+            path="/chat"
+            element={<ChatPage role={session.role} currentUser={session} />}
+          />
           <Route
             path="/tab/:tabId"
             element={

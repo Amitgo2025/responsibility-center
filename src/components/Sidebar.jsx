@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 
-export default function Sidebar({ tabs, role, displayName, openNotesCount, onLogout, onAdminPanel }) {
+export default function Sidebar({ tabs, role, displayName, openNotesCount, unreadChatCount, onLogout, onAdminPanel }) {
   const navigate = useNavigate()
   const location = useLocation()
   const path = location.pathname
@@ -10,6 +10,7 @@ export default function Sidebar({ tabs, role, displayName, openNotesCount, onLog
     if (p === '/notes') return path === '/notes' || path.startsWith('/notes')
     if (p === '/schedule') return path === '/schedule' || path.startsWith('/schedule')
     if (p === '/history') return path === '/history' || path.startsWith('/history')
+    if (p === '/chat') return path === '/chat' || path.startsWith('/chat')
     return path === p
   }
 
@@ -110,6 +111,26 @@ export default function Sidebar({ tabs, role, displayName, openNotesCount, onLog
                 <polyline points="12 7 12 12 16 14" />
               </svg>
               <span className="text-sm font-medium">History</span>
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => navigate('/chat')}
+              className={`w-full text-left px-4 py-2.5 rounded-md transition flex items-center gap-3 ${
+                isActive('/chat')
+                  ? 'bg-ink-700 text-ink-50'
+                  : 'text-ink-200 hover:bg-ink-800 hover:text-ink-50'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+              <span className="text-sm font-medium">Chat</span>
+              {unreadChatCount > 0 && (
+                <span className="ml-auto px-1.5 py-0.5 bg-accent text-white text-[10px] rounded-full font-bold">
+                  {unreadChatCount}
+                </span>
+              )}
             </button>
           </li>
         </ul>

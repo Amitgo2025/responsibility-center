@@ -15,6 +15,8 @@ import ResponsibilityEditor from './ResponsibilityEditor'
 import NoteDialog from './NoteDialog'
 import NotesViewer from './NotesViewer'
 import TodayScheduleBanner from './TodayScheduleBanner'
+import MorningPlanCard from './MorningPlanCard'
+import DailyUpdateBanner from './DailyUpdateBanner'
 
 export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
   const { tabId } = useParams()
@@ -215,10 +217,27 @@ export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
         </div>
       </header>
 
-      <div className="px-10 py-10 max-w-5xl space-y-12">
+      <div className="px-10 py-10 max-w-5xl space-y-6">
+        {/* Admin's daily update — read-only for viewers */}
+        <DailyUpdateBanner role={role} currentUser={currentUser} />
+
+        {/* Morning plan — always visible. Editable only if this is the user's own tab */}
+        <MorningPlanCard
+          personId={tabId}
+          person={tab}
+          currentUser={currentUser}
+          isOwner={
+            !!currentUser?.displayName &&
+            !!tab.name &&
+            currentUser.displayName.toLowerCase().trim() === tab.name.toLowerCase().trim()
+          }
+          isAdmin={role === 'admin'}
+        />
+
         {/* Today's tasks banner — only renders if this person has tasks today */}
         <TodayScheduleBanner currentUser={currentUser} role={role} personId={tabId} />
 
+        <div className="space-y-12 pt-6">
         <Section
           title="Media Buying Tasks"
           subtitle="Ongoing target tasks — the lanes from the team structure"
@@ -258,6 +277,7 @@ export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
           onOpenNote={(r) => setNoteDialogFor(r)}
           onViewNotes={(r) => setViewingNotesFor(r)}
         />
+        </div>
       </div>
 
       {editorState && (

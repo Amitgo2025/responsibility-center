@@ -9,6 +9,7 @@ import {
 } from '../lib/db'
 import TagChip from '../components/TagChip'
 import TodayScheduleBanner from '../components/TodayScheduleBanner'
+import DailyUpdateBanner from '../components/DailyUpdateBanner'
 
 const STATUS_LABELS = {
   active: { label: 'Active', tone: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
@@ -194,6 +195,11 @@ export default function AllResponsibilitiesPage({ role, currentUser }) {
       </header>
 
       <div className="px-10 py-6 max-w-6xl">
+        {/* Daily update from admin — visible to all */}
+        <div className="mb-3">
+          <DailyUpdateBanner role={role} currentUser={currentUser} />
+        </div>
+
         {/* Today's schedule — prominent banner */}
         <div className="mb-5">
           <TodayScheduleBanner currentUser={currentUser} role={role} />

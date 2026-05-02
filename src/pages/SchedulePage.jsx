@@ -565,6 +565,8 @@ function AssignmentCalendar({ task, tabs, onClose, onSaved }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [bulkPersonId, setBulkPersonId] = useState('')
+  const [weekdayFillDay, setWeekdayFillDay] = useState('') // 0..6 as string, '' means none picked
+  const [weekdayFillPerson, setWeekdayFillPerson] = useState('')
 
   function shiftMonth(delta) {
     setMonth((m) => {
@@ -653,6 +655,24 @@ function AssignmentCalendar({ task, tabs, onClose, onSaved }) {
     setAssignments(next)
   }
 
+  // Fill all dates of a chosen weekday in this month with a chosen person.
+  // weekday is 0..6 (Sun..Sat).
+  function fillWeekdayInMonth(weekday, personId) {
+    if (weekday === '' || weekday === null || weekday === undefined) return
+    if (!personId) return
+    const wd = parseInt(weekday, 10)
+    const next = { ...assignments }
+    for (const row of grid) {
+      for (const cell of row) {
+        if (!cell) continue
+        if (cell.getDay() !== wd) continue
+        const dStr = dateKey(cell)
+        if (isEligible(dStr, cell.getDay())) next[dStr] = personId
+      }
+    }
+    setAssignments(next)
+  }
+
   async function handleSave() {
     setSubmitting(true)
     setError('')
@@ -701,39 +721,78 @@ function AssignmentCalendar({ task, tabs, onClose, onSaved }) {
           </div>
 
           {/* Quick-fill toolbar */}
-          <div className="bg-white border border-ink-200 rounded p-3 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-widest text-ink-400 font-medium mr-1">
-              Quick-fill this month:
-            </span>
-            <button
-              onClick={rotateThisMonth}
-              className="px-2.5 py-1 text-xs bg-ink-900 text-white rounded hover:bg-ink-800"
-            >
-              Rotate through team
-            </button>
-            <select
-              value={bulkPersonId}
-              onChange={(e) => setBulkPersonId(e.target.value)}
-              className="px-2 py-1 text-xs bg-white border border-ink-200 rounded"
-            >
-              <option value="">— pick person —</option>
-              {tabs.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <button
-              onClick={fillWithPerson}
-              disabled={!bulkPersonId}
-              className="px-2.5 py-1 text-xs bg-accent text-white rounded hover:bg-accent-dark disabled:opacity-40"
-            >
-              Fill all with this person
-            </button>
-            <button
-              onClick={clearThisMonth}
-              className="px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 rounded ml-auto"
-            >
-              Clear month
-            </button>
+          <div className="bg-white border border-ink-200 rounded p-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-widest text-ink-400 font-medium mr-1">
+                Quick-fill this month:
+              </span>
+              <button
+                onClick={rotateThisMonth}
+                className="px-2.5 py-1 text-xs bg-ink-900 text-white rounded hover:bg-ink-800"
+              >
+                Rotate through team
+              </button>
+              <select
+                value={bulkPersonId}
+                onChange={(e) => setBulkPersonId(e.target.value)}
+                className="px-2 py-1 text-xs bg-white border border-ink-200 rounded"
+              >
+                <option value="">— pick person —</option>
+                {tabs.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={fillWithPerson}
+                disabled={!bulkPersonId}
+                className="px-2.5 py-1 text-xs bg-accent text-white rounded hover:bg-accent-dark disabled:opacity-40"
+              >
+                Fill all with this person
+              </button>
+              <button
+                onClick={clearThisMonth}
+                className="px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 rounded ml-auto"
+              >
+                Clear month
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-ink-100">
+              <span className="text-[11px] uppercase tracking-widest text-ink-400 font-medium mr-1">
+                Fill by weekday:
+              </span>
+              <select
+                value={weekdayFillDay}
+                onChange={(e) => setWeekdayFillDay(e.target.value)}
+                className="px-2 py-1 text-xs bg-white border border-ink-200 rounded"
+              >
+                <option value="">— pick day —</option>
+                {DAY_NAMES_SHORT.map((name, i) => (
+                  <option key={i} value={i}>{name}</option>
+                ))}
+              </select>
+              <span className="text-xs text-ink-400">→</span>
+              <select
+                value={weekdayFillPerson}
+                onChange={(e) => setWeekdayFillPerson(e.target.value)}
+                className="px-2 py-1 text-xs bg-white border border-ink-200 rounded"
+              >
+                <option value="">— pick person —</option>
+                {tabs.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => fillWeekdayInMonth(weekdayFillDay, weekdayFillPerson)}
+                disabled={weekdayFillDay === '' || !weekdayFillPerson}
+                className="px-2.5 py-1 text-xs bg-accent text-white rounded hover:bg-accent-dark disabled:opacity-40"
+              >
+                Apply to all {weekdayFillDay !== '' ? DAY_NAMES_SHORT[parseInt(weekdayFillDay, 10)] + 's' : 'occurrences'}
+              </button>
+              <span className="text-[11px] text-ink-400 ml-auto">
+                Tip: do this 7 times to assign each weekday to a different person.
+              </span>
+            </div>
           </div>
 
           {/* Calendar grid */}

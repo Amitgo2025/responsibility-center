@@ -160,7 +160,7 @@ export async function deleteTagCategory(id) {
   })
   await Promise.all(deletions)
   await deleteDoc(doc(db, 'tagCategories', id))
-  // Strip any references to these tags from responsibilities
+  // Strip any references to these tags from responsibilities and schedule tasks
   if (removedTagIds.length) {
     const respSnap = await getDocs(collection(db, 'responsibilities'))
     const updates = []
@@ -169,6 +169,14 @@ export async function deleteTagCategory(id) {
       const filtered = (data.tags || []).filter((t) => !removedTagIds.includes(t))
       if (filtered.length !== (data.tags || []).length) {
         updates.push(updateDoc(doc(db, 'responsibilities', d.id), { tags: filtered }))
+      }
+    })
+    const taskSnap = await getDocs(collection(db, 'scheduleTasks'))
+    taskSnap.forEach((d) => {
+      const data = d.data()
+      const filtered = (data.tags || []).filter((t) => !removedTagIds.includes(t))
+      if (filtered.length !== (data.tags || []).length) {
+        updates.push(updateDoc(doc(db, 'scheduleTasks', d.id), { tags: filtered }))
       }
     })
     await Promise.all(updates)
@@ -208,6 +216,18 @@ export async function deleteTag(id) {
     if ((data.tags || []).includes(id)) {
       updates.push(
         updateDoc(doc(db, 'responsibilities', d.id), {
+          tags: data.tags.filter((t) => t !== id),
+        }),
+      )
+    }
+  })
+  // Strip from schedule tasks too
+  const taskSnap = await getDocs(collection(db, 'scheduleTasks'))
+  taskSnap.forEach((d) => {
+    const data = d.data()
+    if ((data.tags || []).includes(id)) {
+      updates.push(
+        updateDoc(doc(db, 'scheduleTasks', d.id), {
           tags: data.tags.filter((t) => t !== id),
         }),
       )
@@ -297,6 +317,7 @@ export async function createScheduleTask(data) {
     assignments: data.assignments || {}, // map of { 'YYYY-MM-DD': 'personId' }
     color: data.color || '#c46a3a',
     deadlineTime: data.deadlineTime || '', // 'HH:MM' Israel time, '' = no deadline
+    tags: data.tags || [], // array of tag IDs (any category, but typically 'Schedule Type')
     active: data.active !== false,
     sortOrder: maxOrder + 1,
     createdAt: new Date().toISOString(),
@@ -809,6 +830,33 @@ export async function sendChatMessage(text, author, authorRole) {
 
 export async function deleteChatMessage(id) {
   await deleteDoc(doc(db, 'chatMessages', id))
+}
+
+// Default tags for Schedule Type — auto-seeded on first use
+const DEFAULT_SCHEDULE_TYPE_TAGS = [
+  { name: 'Reports', color: '#2d6e3e' },
+  { name: 'Compliance', color: '#8a3d3d' },
+  { name: 'Optimization', color: '#3a342e' },
+  { name: 'Sources', color: '#7a3d8a' },
+  { name: 'Quality Check', color: '#3d5a8a' },
+  { name: 'Finance', color: '#1c1815' },
+  { name: 'Coordination', color: '#a89e91' },
+]
+
+// Ensures a 'Schedule Type' tag category exists. If newly created, seeds it
+// with sensible defaults. Safe to call repeatedly.
+export async function ensureScheduleTypeCategory() {
+  const cats = await listTagCategories()
+  const existing = cats.find(
+    (c) => (c.name || '').toLowerCase().trim() === 'schedule type',
+  )
+  if (existing) return existing
+  // Create the category and the default tags
+  const cat = await createTagCategory({ name: 'Schedule Type' })
+  for (const t of DEFAULT_SCHEDULE_TYPE_TAGS) {
+    await createTag({ categoryId: cat.id, name: t.name, color: t.color })
+  }
+  return cat
 }
 
 // ============== SEED ==============

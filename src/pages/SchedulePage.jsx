@@ -6,9 +6,14 @@ import {
   deleteScheduleTask,
   setScheduleAssignments,
   listTabs,
+  listTags,
+  listTagCategories,
+  ensureScheduleTypeCategory,
   generateScheduledDates,
   todayDateString,
 } from '../lib/db'
+import TagPicker from '../components/TagPicker'
+import TagChip from '../components/TagChip'
 
 const PRESET_COLORS = [
   '#c46a3a', '#a8501f', '#4285F4', '#1877F2', '#0066CC',
@@ -21,16 +26,34 @@ export default function SchedulePage({ role }) {
   const isAdmin = role === 'admin'
   const [tasks, setTasks] = useState([])
   const [tabs, setTabs] = useState([])
+  const [tags, setTags] = useState([])
+  const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null) // task or { _new: true }
   const [assigning, setAssigning] = useState(null) // task being assigned
 
+  // Filters
+  const [tagFilter, setTagFilter] = useState([]) // array of tag IDs
+  const [cadenceFilter, setCadenceFilter] = useState('') // '' | 'daily' | 'weekly' | 'dates' | 'custom'
+  const [search, setSearch] = useState('')
+
   async function refresh() {
     try {
-      const [t, p] = await Promise.all([listScheduleTasks(), listTabs()])
+      // Make sure the Schedule Type category exists (for new installs / pre-existing data)
+      if (isAdmin) {
+        await ensureScheduleTypeCategory()
+      }
+      const [t, p, tg, c] = await Promise.all([
+        listScheduleTasks(),
+        listTabs(),
+        listTags(),
+        listTagCategories(),
+      ])
       setTasks(t)
       setTabs(p)
+      setTags(tg)
+      setCategories(c)
     } catch (err) {
       setError(err.message)
     }
@@ -79,60 +102,47 @@ export default function SchedulePage({ role }) {
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-ink-500">
-            {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
-          </p>
-          {isAdmin && (
-            <button
-              onClick={() => setEditing({ _new: true })}
-              className="px-3 py-1.5 bg-accent hover:bg-accent-dark text-white text-sm rounded transition"
-            >
-              + New scheduled task
-            </button>
-          )}
-        </div>
+        <FilterBar
+          tasks={tasks}
+          tags={tags}
+          categories={categories}
+          tagFilter={tagFilter}
+          setTagFilter={setTagFilter}
+          cadenceFilter={cadenceFilter}
+          setCadenceFilter={setCadenceFilter}
+          search={search}
+          setSearch={setSearch}
+        />
 
-        {tasks.length === 0 ? (
-          <div className="bg-white border border-dashed border-ink-200 rounded-lg p-12 text-center">
-            <p className="text-ink-400">No scheduled tasks yet.</p>
-            {isAdmin && (
-              <button
-                onClick={() => setEditing({ _new: true })}
-                className="mt-3 text-sm text-accent hover:text-accent-dark font-medium"
-              >
-                + Create the first one
-              </button>
-            )}
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {tasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                tabs={tabs}
-                isAdmin={isAdmin}
-                onEdit={() => setEditing(task)}
-                onAssign={() => setAssigning(task)}
-                onDelete={async () => {
-                  if (!confirm(`Delete "${task.name}"? This removes the template and any pending instances.`)) return
-                  await deleteScheduleTask(task.id)
-                  await refresh()
-                }}
-                onToggleActive={async () => {
-                  await updateScheduleTask(task.id, { active: !task.active })
-                  await refresh()
-                }}
-              />
-            ))}
-          </ul>
-        )}
+        <FilteredTaskList
+          tasks={tasks}
+          tabs={tabs}
+          tags={tags}
+          categories={categories}
+          isAdmin={isAdmin}
+          tagFilter={tagFilter}
+          cadenceFilter={cadenceFilter}
+          search={search}
+          onEdit={(task) => setEditing(task)}
+          onAssign={(task) => setAssigning(task)}
+          onDelete={async (task) => {
+            if (!confirm(`Delete "${task.name}"? This removes the template and any pending instances.`)) return
+            await deleteScheduleTask(task.id)
+            await refresh()
+          }}
+          onToggleActive={async (task) => {
+            await updateScheduleTask(task.id, { active: !task.active })
+            await refresh()
+          }}
+          onCreateNew={() => setEditing({ _new: true })}
+        />
       </div>
 
       {editing && (
         <TaskEditor
           task={editing._new ? null : editing}
+          allTags={tags}
+          allCategories={categories}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null)
@@ -157,7 +167,7 @@ export default function SchedulePage({ role }) {
 }
 
 // ============== TASK ROW ==============
-function TaskRow({ task, tabs, isAdmin, onEdit, onAssign, onDelete, onToggleActive }) {
+function TaskRow({ task, tabs, tags, categories, isAdmin, onEdit, onAssign, onDelete, onToggleActive }) {
   // Show next 7 days assignment preview
   const preview = useMemo(() => {
     const today = todayDateString()
@@ -182,9 +192,9 @@ function TaskRow({ task, tabs, isAdmin, onEdit, onAssign, onDelete, onToggleActi
     return task.cadence
   }
 
-  function personName(id) {
-    return tabs.find((t) => t.id === id)?.name || ''
-  }
+  const taskTags = (task.tags || [])
+    .map((id) => (tags || []).find((t) => t.id === id))
+    .filter(Boolean)
 
   return (
     <li className={`bg-white border rounded-lg p-4 ${task.active ? 'border-ink-200' : 'border-ink-100 opacity-60'}`}>
@@ -208,6 +218,18 @@ function TaskRow({ task, tabs, isAdmin, onEdit, onAssign, onDelete, onToggleActi
                 </span>
               )}
             </div>
+            {taskTags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {taskTags.map((tag) => (
+                  <TagChip
+                    key={tag.id}
+                    tag={tag}
+                    category={(categories || []).find((c) => c.id === tag.categoryId)}
+                    size="xs"
+                  />
+                ))}
+              </div>
+            )}
             {task.description && (
               <p className="text-sm text-ink-600 mt-1 line-clamp-2">{task.description}</p>
             )}
@@ -276,7 +298,7 @@ function formatShortDate(dateStr) {
 }
 
 // ============== TASK EDITOR ==============
-function TaskEditor({ task, onClose, onSaved }) {
+function TaskEditor({ task, onClose, onSaved, allTags, allCategories }) {
   const isCreate = !task
   const [name, setName] = useState(task?.name || '')
   const [description, setDescription] = useState(task?.description || '')
@@ -285,6 +307,7 @@ function TaskEditor({ task, onClose, onSaved }) {
   const [dates, setDates] = useState(task?.dates || [])
   const [color, setColor] = useState(task?.color || '#c46a3a')
   const [deadlineTime, setDeadlineTime] = useState(task?.deadlineTime || '')
+  const [tagIds, setTagIds] = useState(task?.tags || [])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -316,6 +339,7 @@ function TaskEditor({ task, onClose, onSaved }) {
         dates: cadence === 'dates' ? dates : [],
         color,
         deadlineTime: deadlineTime || '',
+        tags: tagIds,
       }
       if (isCreate) {
         await createScheduleTask(payload)
@@ -469,6 +493,21 @@ function TaskEditor({ task, onClose, onSaved }) {
             <Time24Picker value={deadlineTime} onChange={setDeadlineTime} />
             <p className="text-xs text-ink-400 mt-1.5">
               After this hour an unfinished task is logged as <span className="text-red-600 font-medium">missed</span>.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase tracking-widest text-ink-400 mb-1.5 font-medium">
+              Tags
+            </label>
+            <TagPicker
+              allTags={allTags || []}
+              allCategories={allCategories || []}
+              selectedIds={tagIds}
+              onChange={setTagIds}
+            />
+            <p className="text-xs text-ink-400 mt-1">
+              Use the <span className="font-mono">Schedule Type</span> category for filtering. You can add or rename types from Admin settings → Tags & Categories.
             </p>
           </div>
 
@@ -853,6 +892,199 @@ function Time24Picker({ value, onChange }) {
         </span>
       )}
     </div>
+  )
+}
+
+// =================================================
+// Filter bar + filtered list
+// =================================================
+function FilterBar({ tasks, tags, categories, tagFilter, setTagFilter, cadenceFilter, setCadenceFilter, search, setSearch }) {
+  // Group tags by category for organized display
+  const tagsByCategory = useMemo(() => {
+    return categories.map((cat) => ({
+      category: cat,
+      tags: tags.filter((t) => t.categoryId === cat.id),
+    })).filter((g) => g.tags.length > 0)
+  }, [tags, categories])
+
+  function toggleTag(tagId) {
+    setTagFilter((prev) =>
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
+    )
+  }
+
+  function clearAll() {
+    setTagFilter([])
+    setCadenceFilter('')
+    setSearch('')
+  }
+
+  const hasFilters = tagFilter.length > 0 || cadenceFilter || search
+
+  return (
+    <div className="bg-white border border-ink-200 rounded-lg p-4 mb-4 space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or description…"
+          className="flex-1 min-w-[180px] px-3 py-1.5 bg-paper border border-ink-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium">
+          Cadence:
+        </span>
+        <CadenceFilterPill v="" current={cadenceFilter} onSelect={setCadenceFilter}>All</CadenceFilterPill>
+        <CadenceFilterPill v="daily" current={cadenceFilter} onSelect={setCadenceFilter}>Daily</CadenceFilterPill>
+        <CadenceFilterPill v="weekly" current={cadenceFilter} onSelect={setCadenceFilter}>Weekly</CadenceFilterPill>
+        <CadenceFilterPill v="dates" current={cadenceFilter} onSelect={setCadenceFilter}>Dates</CadenceFilterPill>
+        <CadenceFilterPill v="custom" current={cadenceFilter} onSelect={setCadenceFilter}>Custom</CadenceFilterPill>
+        {hasFilters && (
+          <button
+            onClick={clearAll}
+            className="ml-auto text-xs text-ink-500 hover:text-ink-900 underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {tagsByCategory.length > 0 && (
+        <div className="space-y-1.5 pt-2 border-t border-ink-100">
+          {tagsByCategory.map(({ category, tags: catTags }) => (
+            <div key={category.id} className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium w-28 flex-shrink-0">
+                {category.name}:
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {catTags.map((tag) => {
+                  const sel = tagFilter.includes(tag.id)
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => toggleTag(tag.id)}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition ${
+                        sel
+                          ? 'border-transparent shadow-sm'
+                          : 'bg-white border-ink-200 text-ink-700 hover:border-ink-400'
+                      }`}
+                      style={
+                        sel
+                          ? {
+                              background: tag.color,
+                              color: getTextColor(tag.color),
+                              borderColor: tag.color,
+                            }
+                          : undefined
+                      }
+                    >
+                      {tag.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CadenceFilterPill({ v, current, onSelect, children }) {
+  const active = current === v
+  return (
+    <button
+      onClick={() => onSelect(v)}
+      className={`px-2.5 py-1 text-xs rounded-full border transition ${
+        active
+          ? 'bg-ink-900 text-white border-ink-900'
+          : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function FilteredTaskList({
+  tasks, tabs, tags, categories, isAdmin,
+  tagFilter, cadenceFilter, search,
+  onEdit, onAssign, onDelete, onToggleActive, onCreateNew,
+}) {
+  const filtered = useMemo(() => {
+    const lc = (search || '').trim().toLowerCase()
+    return tasks.filter((task) => {
+      if (cadenceFilter && task.cadence !== cadenceFilter) return false
+      if (tagFilter.length > 0) {
+        const taskTags = task.tags || []
+        // OR within selection — task matches if it has any of the selected tags
+        if (!tagFilter.some((id) => taskTags.includes(id))) return false
+      }
+      if (lc) {
+        const hay = [task.name || '', task.description || ''].join(' ').toLowerCase()
+        if (!hay.includes(lc)) return false
+      }
+      return true
+    })
+  }, [tasks, cadenceFilter, tagFilter, search])
+
+  const hasFilters = tagFilter.length > 0 || cadenceFilter || (search || '').trim()
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-ink-500 tabular">
+          {filtered.length} of {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+          {hasFilters && filtered.length !== tasks.length && (
+            <span className="text-ink-400"> · filtered</span>
+          )}
+        </p>
+        {isAdmin && (
+          <button
+            onClick={onCreateNew}
+            className="px-3 py-1.5 bg-accent hover:bg-accent-dark text-white text-sm rounded transition"
+          >
+            + New scheduled task
+          </button>
+        )}
+      </div>
+
+      {tasks.length === 0 ? (
+        <div className="bg-white border border-dashed border-ink-200 rounded-lg p-12 text-center">
+          <p className="text-ink-400">No scheduled tasks yet.</p>
+          {isAdmin && (
+            <button
+              onClick={onCreateNew}
+              className="mt-3 text-sm text-accent hover:text-accent-dark font-medium"
+            >
+              + Create the first one
+            </button>
+          )}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white border border-dashed border-ink-200 rounded-lg p-12 text-center">
+          <p className="text-ink-400">No tasks match these filters.</p>
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {filtered.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              tabs={tabs}
+              tags={tags}
+              categories={categories}
+              isAdmin={isAdmin}
+              onEdit={() => onEdit(task)}
+              onAssign={() => onAssign(task)}
+              onDelete={() => onDelete(task)}
+              onToggleActive={() => onToggleActive(task)}
+            />
+          ))}
+        </ul>
+      )}
+    </>
   )
 }
 

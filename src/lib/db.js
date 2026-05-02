@@ -353,6 +353,31 @@ export async function setScheduleAssignments(taskId, assignments) {
     assignments,
     updatedAt: new Date().toISOString(),
   })
+  // Propagate today's assignment to today's existing open instance, if any.
+  // This way assigning a person to a date that already has an instance updates
+  // who owns it instead of being silently ignored.
+  const today = todayDateString()
+  const todayPerson = assignments[today] || ''
+  const snap = await getDocs(
+    query(
+      collection(db, 'taskInstances'),
+      where('templateId', '==', taskId),
+      where('date', '==', today),
+    ),
+  )
+  const updates = []
+  snap.forEach((d) => {
+    const data = d.data()
+    if (data.status === 'open' && (data.personId || '') !== todayPerson) {
+      updates.push(
+        updateDoc(doc(db, 'taskInstances', d.id), {
+          personId: todayPerson,
+          reassignedAt: new Date().toISOString(),
+        }),
+      )
+    }
+  })
+  await Promise.all(updates)
 }
 
 // ============== SCHEDULE: TASK INSTANCES ==============
@@ -520,35 +545,54 @@ export function formatIsraelTime(isoOrDate, opts = {}) {
 // and no instance exists yet for (templateId, today's date), create one.
 export async function ensureTodayInstances() {
   const today = todayDateString()
-  const dayOfWeek = new Date(today + 'T00:00:00').getDay()
+  // Compute day-of-week in Israel timezone — not the browser's local TZ.
+  // 'today' is YYYY-MM-DD in Asia/Jerusalem already.
+  const [y, mo, d] = today.split('-').map((x) => parseInt(x, 10))
+  const dayOfWeek = new Date(Date.UTC(y, mo - 1, d)).getUTCDay()
 
   const [templates, existing] = await Promise.all([
     listScheduleTasks(),
     listTaskInstances({ date: today }),
   ])
-  const existingTplIds = new Set(existing.map((i) => i.templateId))
+  const existingByTpl = new Map()
+  existing.forEach((i) => existingByTpl.set(i.templateId, i))
 
   const created = []
+  const synced = []
   for (const tpl of templates) {
     if (!tpl.active) continue
-    if (existingTplIds.has(tpl.id)) continue
     if (!shouldRunOn(tpl, today, dayOfWeek)) continue
-    const personId = tpl.assignments?.[today] || ''
-    const deadline = tpl.deadlineTime
-      ? computeDeadlineISOSimple(today, tpl.deadlineTime)
-      : null
-    const inst = await createTaskInstance({
-      templateId: tpl.id,
-      name: tpl.name,
-      date: today,
-      personId,
-      color: tpl.color || '#c46a3a',
-      deadline,
-      deadlineTime: tpl.deadlineTime || '',
-    })
-    created.push(inst)
+    const expectedPerson = tpl.assignments?.[today] || ''
+    const existingInstance = existingByTpl.get(tpl.id)
+
+    if (!existingInstance) {
+      // Need to create today's instance
+      const deadline = tpl.deadlineTime
+        ? computeDeadlineISOSimple(today, tpl.deadlineTime)
+        : null
+      const inst = await createTaskInstance({
+        templateId: tpl.id,
+        name: tpl.name,
+        date: today,
+        personId: expectedPerson,
+        color: tpl.color || '#c46a3a',
+        deadline,
+        deadlineTime: tpl.deadlineTime || '',
+      })
+      created.push(inst)
+    } else if (
+      existingInstance.status === 'open' &&
+      (existingInstance.personId || '') !== expectedPerson
+    ) {
+      // Sync personId to match current template assignment
+      await updateDoc(doc(db, 'taskInstances', existingInstance.id), {
+        personId: expectedPerson,
+        reassignedAt: new Date().toISOString(),
+      })
+      synced.push(existingInstance.id)
+    }
   }
-  return { created }
+  return { created, synced }
 }
 
 export function shouldRunOn(template, dateStr, dayOfWeek) {

@@ -3,6 +3,8 @@ import {
   listScheduleTasks,
   listTabs,
   listTaskInstances,
+  listTags,
+  listTagCategories,
   generateScheduledDates,
   todayDateString,
 } from '../lib/db'
@@ -12,6 +14,8 @@ export default function ScheduleGridPage({ role }) {
   const [tasks, setTasks] = useState([])
   const [tabs, setTabs] = useState([])
   const [instances, setInstances] = useState([])
+  const [tags, setTags] = useState([])
+  const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -19,16 +23,27 @@ export default function ScheduleGridPage({ role }) {
   const [dateFrom, setDateFrom] = useState(() => firstOfThisMonth())
   const [dateTo, setDateTo] = useState(() => lastOfThisMonth())
 
+  // Task filters (independent from the Schedule page filters)
+  const [tagFilter, setTagFilter] = useState([]) // tag IDs
+  const [cadenceFilter, setCadenceFilter] = useState('') // '' | 'daily' | 'weekly' | 'dates' | 'custom'
+  const [search, setSearch] = useState('')
+  const [hiddenTaskIds, setHiddenTaskIds] = useState([]) // explicitly hidden by user
+  const [showTaskPicker, setShowTaskPicker] = useState(false)
+
   async function refresh() {
     try {
-      const [t, p, inst] = await Promise.all([
+      const [t, p, inst, tg, c] = await Promise.all([
         listScheduleTasks(),
         listTabs(),
         listTaskInstances({ dateFrom, dateTo }),
+        listTags(),
+        listTagCategories(),
       ])
       setTasks(t)
       setTabs(p)
       setInstances(inst)
+      setTags(tg)
+      setCategories(c)
     } catch (err) {
       setError(err.message)
     }
@@ -76,9 +91,33 @@ export default function ScheduleGridPage({ role }) {
     setDateTo(formatDateInput(end))
   }
 
-  // Tasks shown in grid — only those marked showInGrid (default true) and active
+  // Tasks shown in grid — apply filters in this order:
+  //   1. Active and showInGrid (admin's "show in grid" flag from task editor)
+  //   2. Cadence filter
+  //   3. Tag filter (OR within selection)
+  //   4. Search by name/description
+  //   5. Explicitly hidden by user via the picker
   const gridTasks = useMemo(() => {
-    return tasks.filter((t) => t.active && t.showInGrid !== false)
+    const lc = (search || '').trim().toLowerCase()
+    return tasks.filter((t) => {
+      if (!t.active || t.showInGrid === false) return false
+      if (hiddenTaskIds.includes(t.id)) return false
+      if (cadenceFilter && t.cadence !== cadenceFilter) return false
+      if (tagFilter.length > 0) {
+        const taskTags = t.tags || []
+        if (!tagFilter.some((id) => taskTags.includes(id))) return false
+      }
+      if (lc) {
+        const hay = [t.name || '', t.description || ''].join(' ').toLowerCase()
+        if (!hay.includes(lc)) return false
+      }
+      return true
+    })
+  }, [tasks, cadenceFilter, tagFilter, search, hiddenTaskIds])
+
+  // Total tasks eligible for the grid (active + showInGrid) — for the counter
+  const eligibleTaskCount = useMemo(() => {
+    return tasks.filter((t) => t.active && t.showInGrid !== false).length
   }, [tasks])
 
   const tabsById = useMemo(() => {
@@ -196,11 +235,31 @@ export default function ScheduleGridPage({ role }) {
           </div>
         </div>
 
+        {/* Task filter bar */}
+        <GridFilterBar
+          allTasks={tasks}
+          tags={tags}
+          categories={categories}
+          tagFilter={tagFilter}
+          setTagFilter={setTagFilter}
+          cadenceFilter={cadenceFilter}
+          setCadenceFilter={setCadenceFilter}
+          search={search}
+          setSearch={setSearch}
+          hiddenTaskIds={hiddenTaskIds}
+          setHiddenTaskIds={setHiddenTaskIds}
+          showTaskPicker={showTaskPicker}
+          setShowTaskPicker={setShowTaskPicker}
+        />
+
         <div className="text-sm text-ink-500 mb-3 tabular">
-          {dates.length} day{dates.length === 1 ? '' : 's'} · {gridTasks.length} task{gridTasks.length === 1 ? '' : 's'}
+          {dates.length} day{dates.length === 1 ? '' : 's'} · {gridTasks.length} of {eligibleTaskCount} task{eligibleTaskCount === 1 ? '' : 's'}
+          {gridTasks.length !== eligibleTaskCount && (
+            <span className="text-ink-400"> · filtered</span>
+          )}
           {isAdmin && (
             <span className="text-ink-400">
-              {' '}· tip: in Schedule task editor you can hide a task from the grid
+              {' '}· tip: in Schedule task editor you can hide a task from the grid permanently
             </span>
           )}
         </div>
@@ -210,10 +269,25 @@ export default function ScheduleGridPage({ role }) {
         {!loading && (gridTasks.length === 0 || dates.length === 0) ? (
           <div className="bg-white border border-dashed border-ink-200 rounded-lg p-12 text-center">
             <p className="text-ink-400">
-              {gridTasks.length === 0
+              {dates.length === 0
+                ? 'Empty date range.'
+                : eligibleTaskCount === 0
                 ? 'No active scheduled tasks to display.'
-                : 'Empty date range.'}
+                : 'No tasks match these filters.'}
             </p>
+            {dates.length > 0 && eligibleTaskCount > 0 && gridTasks.length === 0 && (
+              <button
+                onClick={() => {
+                  setTagFilter([])
+                  setCadenceFilter('')
+                  setSearch('')
+                  setHiddenTaskIds([])
+                }}
+                className="mt-3 text-sm text-accent hover:text-accent-dark font-medium"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : !loading ? (
           <div className="bg-white border border-ink-200 rounded-lg overflow-x-auto">
@@ -357,6 +431,210 @@ export default function ScheduleGridPage({ role }) {
         )}
       </div>
     </main>
+  )
+}
+
+// =================================================
+// Filter bar for the grid
+// =================================================
+function GridFilterBar({
+  allTasks, tags, categories,
+  tagFilter, setTagFilter,
+  cadenceFilter, setCadenceFilter,
+  search, setSearch,
+  hiddenTaskIds, setHiddenTaskIds,
+  showTaskPicker, setShowTaskPicker,
+}) {
+  const tagsByCategory = useMemo(() => {
+    return categories.map((cat) => ({
+      category: cat,
+      tags: tags.filter((t) => t.categoryId === cat.id),
+    })).filter((g) => g.tags.length > 0)
+  }, [tags, categories])
+
+  // Tasks eligible for the picker — same rule as grid: active + showInGrid
+  const eligibleTasks = useMemo(() => {
+    return allTasks.filter((t) => t.active && t.showInGrid !== false)
+  }, [allTasks])
+
+  function toggleTag(tagId) {
+    setTagFilter((prev) =>
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId],
+    )
+  }
+
+  function toggleHidden(taskId) {
+    setHiddenTaskIds((prev) =>
+      prev.includes(taskId) ? prev.filter((t) => t !== taskId) : [...prev, taskId],
+    )
+  }
+
+  function showAllTasks() {
+    setHiddenTaskIds([])
+  }
+
+  function hideAllTasks() {
+    setHiddenTaskIds(eligibleTasks.map((t) => t.id))
+  }
+
+  function clearAll() {
+    setTagFilter([])
+    setCadenceFilter('')
+    setSearch('')
+    setHiddenTaskIds([])
+  }
+
+  const hasFilters =
+    tagFilter.length > 0 ||
+    cadenceFilter ||
+    (search || '').trim() ||
+    hiddenTaskIds.length > 0
+
+  return (
+    <div className="bg-white border border-ink-200 rounded-lg p-4 mb-4 space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search task name or description…"
+          className="flex-1 min-w-[180px] px-3 py-1.5 bg-paper border border-ink-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        />
+        <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium">
+          Cadence:
+        </span>
+        <CadencePill v="" current={cadenceFilter} onSelect={setCadenceFilter}>All</CadencePill>
+        <CadencePill v="daily" current={cadenceFilter} onSelect={setCadenceFilter}>Daily</CadencePill>
+        <CadencePill v="weekly" current={cadenceFilter} onSelect={setCadenceFilter}>Weekly</CadencePill>
+        <CadencePill v="dates" current={cadenceFilter} onSelect={setCadenceFilter}>Dates</CadencePill>
+        <CadencePill v="custom" current={cadenceFilter} onSelect={setCadenceFilter}>Custom</CadencePill>
+        <button
+          onClick={() => setShowTaskPicker(!showTaskPicker)}
+          className={`px-2.5 py-1 text-xs rounded-full border transition ${
+            showTaskPicker || hiddenTaskIds.length > 0
+              ? 'bg-ink-900 text-white border-ink-900'
+              : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+          }`}
+        >
+          {hiddenTaskIds.length > 0
+            ? `Pick tasks (${eligibleTasks.length - hiddenTaskIds.length}/${eligibleTasks.length})`
+            : 'Pick tasks'}
+        </button>
+        {hasFilters && (
+          <button
+            onClick={clearAll}
+            className="text-xs text-ink-500 hover:text-ink-900 underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {tagsByCategory.length > 0 && (
+        <div className="space-y-1.5 pt-2 border-t border-ink-100">
+          {tagsByCategory.map(({ category, tags: catTags }) => (
+            <div key={category.id} className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium w-28 flex-shrink-0">
+                {category.name}:
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {catTags.map((tag) => {
+                  const sel = tagFilter.includes(tag.id)
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => toggleTag(tag.id)}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition ${
+                        sel
+                          ? 'border-transparent shadow-sm'
+                          : 'bg-white border-ink-200 text-ink-700 hover:border-ink-400'
+                      }`}
+                      style={
+                        sel
+                          ? {
+                              background: tag.color,
+                              color: getTextColor(tag.color),
+                              borderColor: tag.color,
+                            }
+                          : undefined
+                      }
+                    >
+                      {tag.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showTaskPicker && (
+        <div className="pt-2 border-t border-ink-100">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium">
+              Pick tasks to show:
+            </span>
+            <button
+              onClick={showAllTasks}
+              className="text-[11px] text-ink-600 hover:text-ink-900 underline"
+            >
+              Show all
+            </button>
+            <button
+              onClick={hideAllTasks}
+              className="text-[11px] text-ink-600 hover:text-ink-900 underline"
+            >
+              Hide all
+            </button>
+            <span className="text-[10px] text-ink-400 ml-auto">
+              {eligibleTasks.length - hiddenTaskIds.length} of {eligibleTasks.length} shown
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1 max-h-60 overflow-y-auto">
+            {eligibleTasks.map((task) => {
+              const hidden = hiddenTaskIds.includes(task.id)
+              return (
+                <label
+                  key={task.id}
+                  className="flex items-center gap-2 px-2 py-1 hover:bg-ink-50 rounded cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={!hidden}
+                    onChange={() => toggleHidden(task.id)}
+                    className="accent-accent"
+                  />
+                  <span
+                    className="w-1 h-4 rounded-sm flex-shrink-0"
+                    style={{ background: task.color || '#c46a3a' }}
+                  />
+                  <span className={`text-xs ${hidden ? 'text-ink-400 line-through' : 'text-ink-800'}`}>
+                    {task.name}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CadencePill({ v, current, onSelect, children }) {
+  const active = current === v
+  return (
+    <button
+      onClick={() => onSelect(v)}
+      className={`px-2.5 py-1 text-xs rounded-full border transition ${
+        active
+          ? 'bg-ink-900 text-white border-ink-900'
+          : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 

@@ -4,6 +4,7 @@ import {
   createScheduleTask,
   updateScheduleTask,
   deleteScheduleTask,
+  reorderScheduleTask,
   setScheduleAssignments,
   listTabs,
   listTags,
@@ -134,6 +135,17 @@ export default function SchedulePage({ role }) {
             await updateScheduleTask(task.id, { active: !task.active })
             await refresh()
           }}
+          onMove={async (task, direction, visibleList) => {
+            try {
+              // Reorder against the list the user is actually looking at —
+              // when filters are active, this means swapping with the next
+              // visible task, not whatever is in the underlying sortOrder.
+              await reorderScheduleTask(task.id, visibleList || tasks, direction)
+              await refresh()
+            } catch (err) {
+              setError(err.message)
+            }
+          }}
           onCreateNew={() => setEditing({ _new: true })}
         />
       </div>
@@ -167,7 +179,11 @@ export default function SchedulePage({ role }) {
 }
 
 // ============== TASK ROW ==============
-function TaskRow({ task, tabs, tags, categories, isAdmin, onEdit, onAssign, onDelete, onToggleActive }) {
+function TaskRow({
+  task, tabs, tags, categories, isAdmin,
+  onEdit, onAssign, onDelete, onToggleActive,
+  onMoveUp, onMoveDown, canMoveUp, canMoveDown,
+}) {
   // Show next 7 days assignment preview
   const preview = useMemo(() => {
     const today = todayDateString()
@@ -237,6 +253,24 @@ function TaskRow({ task, tabs, tags, categories, isAdmin, onEdit, onAssign, onDe
         </div>
         {isAdmin && (
           <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={onMoveUp}
+              disabled={!canMoveUp}
+              className="px-1.5 py-1 text-ink-400 hover:text-ink-900 disabled:opacity-20 disabled:cursor-not-allowed text-xs leading-none"
+              title="Move up"
+              aria-label="Move up"
+            >
+              ▲
+            </button>
+            <button
+              onClick={onMoveDown}
+              disabled={!canMoveDown}
+              className="px-1.5 py-1 text-ink-400 hover:text-ink-900 disabled:opacity-20 disabled:cursor-not-allowed text-xs leading-none"
+              title="Move down"
+              aria-label="Move down"
+            >
+              ▼
+            </button>
             <button
               onClick={onToggleActive}
               className={`px-2 py-1 text-xs rounded transition ${
@@ -1089,7 +1123,7 @@ function CadenceFilterPill({ v, current, onSelect, children }) {
 function FilteredTaskList({
   tasks, tabs, tags, categories, isAdmin,
   tagFilter, cadenceFilter, search,
-  onEdit, onAssign, onDelete, onToggleActive, onCreateNew,
+  onEdit, onAssign, onDelete, onToggleActive, onMove, onCreateNew,
 }) {
   const filtered = useMemo(() => {
     const lc = (search || '').trim().toLowerCase()
@@ -1147,7 +1181,7 @@ function FilteredTaskList({
         </div>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((task) => (
+          {filtered.map((task, idx) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -1155,10 +1189,14 @@ function FilteredTaskList({
               tags={tags}
               categories={categories}
               isAdmin={isAdmin}
+              canMoveUp={idx > 0}
+              canMoveDown={idx < filtered.length - 1}
               onEdit={() => onEdit(task)}
               onAssign={() => onAssign(task)}
               onDelete={() => onDelete(task)}
               onToggleActive={() => onToggleActive(task)}
+              onMoveUp={() => onMove(task, -1, filtered)}
+              onMoveDown={() => onMove(task, 1, filtered)}
             />
           ))}
         </ul>

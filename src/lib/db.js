@@ -369,6 +369,22 @@ export async function deleteScheduleTask(id) {
   await deleteDoc(doc(db, 'scheduleTasks', id))
 }
 
+// Move a schedule task one step up or down in the sortOrder.
+// `direction` is -1 (up) or +1 (down). `currentList` is the list as currently
+// displayed — needed to find the neighbour we swap with.
+export async function reorderScheduleTask(id, currentList, direction) {
+  const idx = currentList.findIndex((t) => t.id === id)
+  if (idx < 0) return
+  const target = idx + direction
+  if (target < 0 || target >= currentList.length) return
+  const a = currentList[idx]
+  const b = currentList[target]
+  await Promise.all([
+    updateDoc(doc(db, 'scheduleTasks', a.id), { sortOrder: b.sortOrder ?? target }),
+    updateDoc(doc(db, 'scheduleTasks', b.id), { sortOrder: a.sortOrder ?? idx }),
+  ])
+}
+
 // Bulk-set assignments for a template — used by the calendar UI
 export async function setScheduleAssignments(taskId, assignments) {
   await updateDoc(doc(db, 'scheduleTasks', taskId), {

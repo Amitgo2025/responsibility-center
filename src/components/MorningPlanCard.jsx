@@ -5,6 +5,7 @@ import {
   getOpenPlanForPerson,
   submitDailyPlan,
   closeDailyPlan,
+  editDailyPlan,
   listTags,
   listTagCategories,
   todayDateString,
@@ -25,6 +26,9 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [editingTodayPlan, setEditingTodayPlan] = useState(false)
+  const [editLines, setEditLines] = useState([])
+  const [editFeedback, setEditFeedback] = useState('')
 
   // Form state for today's plan
   const [lines, setLines] = useState([emptyLine()])
@@ -265,6 +269,83 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
   // If still in 'submitted' state, owner can add end-of-day feedback to close it now.
   if (todayPlan) {
     const isSubmittedNotClosed = todayPlan.status === 'submitted'
+    const canEdit = isOwner || isAdmin
+
+    function startEditing() {
+      // Snapshot current plan into editLines / editFeedback
+      const seedLines = (todayPlan.lines && todayPlan.lines.length > 0)
+        ? todayPlan.lines.map((l) => ({
+            lane: l.lane || '',
+            platforms: [...(l.platforms || [])],
+            notes: l.notes || '',
+          }))
+        : [emptyLine()]
+      setEditLines(seedLines)
+      setEditFeedback(todayPlan.feedback || '')
+      setEditingTodayPlan(true)
+      setError('')
+    }
+
+    function cancelEditing() {
+      setEditingTodayPlan(false)
+      setEditLines([])
+      setEditFeedback('')
+      setError('')
+    }
+
+    async function saveEdits() {
+      const valid = editLines.filter((l) => l.lane && l.lane.trim())
+      if (valid.length === 0) {
+        setError('At least one lane is required.')
+        return
+      }
+      setSubmitting(true)
+      setError('')
+      try {
+        const patch = {
+          lines: valid.map((l) => ({
+            lane: l.lane,
+            platforms: l.platforms,
+            notes: (l.notes || '').trim(),
+          })),
+        }
+        if (todayPlan.status === 'closed') {
+          patch.feedback = editFeedback.trim()
+        }
+        await editDailyPlan(
+          todayPlan.id,
+          patch,
+          currentUser?.displayName || '',
+        )
+        setEditingTodayPlan(false)
+        await refresh()
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setSubmitting(false)
+      }
+    }
+
+    function editLineUpdate(idx, patch) {
+      setEditLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)))
+    }
+    function editLineAdd() {
+      setEditLines((prev) => [...prev, emptyLine()])
+    }
+    function editLineRemove(idx) {
+      setEditLines((prev) => prev.length === 1 ? [emptyLine()] : prev.filter((_, i) => i !== idx))
+    }
+    function editLineTogglePlatform(idx, tagId) {
+      setEditLines((prev) => prev.map((l, i) => {
+        if (i !== idx) return l
+        const has = l.platforms.includes(tagId)
+        return {
+          ...l,
+          platforms: has ? l.platforms.filter((x) => x !== tagId) : [...l.platforms, tagId],
+        }
+      }))
+    }
+
     return (
       <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-5 shadow-sm">
         <div className="flex items-baseline gap-2 mb-3 flex-wrap">
@@ -273,88 +354,185 @@ export default function MorningPlanCard({ personId, person, currentUser, isOwner
           </svg>
           <h2 className="font-display text-xl text-ink-900">
             Today's plan {todayPlan.status === 'closed' ? 'closed' : 'submitted'}
+            {editingTodayPlan && <span className="text-amber-700 italic"> · editing</span>}
           </h2>
           <span className="text-xs text-emerald-700">
             · sent at {formatIsraelTime(todayPlan.submittedAt)}
           </span>
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="ml-auto text-xs text-ink-500 hover:text-ink-900 underline"
-          >
-            {collapsed ? 'Show' : 'Collapse'}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {canEdit && !editingTodayPlan && (
+              <button
+                onClick={startEditing}
+                className="text-xs text-ink-700 hover:text-ink-900 px-2 py-0.5 border border-ink-300 rounded hover:bg-white"
+              >
+                Edit
+              </button>
+            )}
+            {!editingTodayPlan && (
+              <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="text-xs text-ink-500 hover:text-ink-900 underline"
+              >
+                {collapsed ? 'Show' : 'Collapse'}
+              </button>
+            )}
+          </div>
         </div>
 
-        {!collapsed && (
-          <div className="space-y-2">
-            {todayPlan.lines.map((line, i) => (
-              <PlanLineDisplay key={i} line={line} platformTags={platformTags} />
-            ))}
-          </div>
-        )}
-
-        {/* End-of-day feedback section */}
-        {isSubmittedNotClosed && (
-          <div className="mt-4 pt-4 border-t border-emerald-200">
-            <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
-              End-of-day feedback (optional but recommended)
+        {/* === Edit mode === */}
+        {editingTodayPlan ? (
+          <>
+            <div className="space-y-3">
+              {editLines.map((line, idx) => (
+                <PlanLineEditor
+                  key={idx}
+                  line={line}
+                  platformTags={platformTags}
+                  onChange={(patch) => editLineUpdate(idx, patch)}
+                  onTogglePlatform={(tagId) => editLineTogglePlatform(idx, tagId)}
+                  onRemove={() => editLineRemove(idx)}
+                  canRemove={editLines.length > 1}
+                  index={idx}
+                />
+              ))}
             </div>
-            <textarea
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              rows={2}
-              placeholder="How did the day go? What got done, what didn't…"
-              className="w-full px-3 py-2 bg-white border border-ink-200 rounded text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-accent resize-y"
-            />
             <button
-              onClick={async () => {
-                if (!feedback.trim()) {
-                  setError('Add a short feedback before closing.')
-                  return
-                }
-                setSubmitting(true)
-                setError('')
-                try {
-                  await closeDailyPlan(
-                    todayPlan.id,
-                    feedback.trim(),
-                    currentUser?.displayName || '',
-                  )
-                  setFeedback('')
-                  await refresh()
-                } catch (err) {
-                  setError(err.message)
-                } finally {
-                  setSubmitting(false)
-                }
-              }}
-              disabled={submitting || !feedback.trim()}
-              className="mt-2 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-sm rounded transition disabled:opacity-40"
+              onClick={editLineAdd}
+              className="mt-3 text-sm text-accent hover:text-accent-dark font-medium"
             >
-              {submitting ? 'Saving…' : 'Close day with feedback'}
+              + Add another lane
             </button>
+
+            {todayPlan.status === 'closed' && (
+              <div className="mt-4">
+                <label className="block text-[11px] uppercase tracking-widest text-ink-500 mb-1.5 font-medium">
+                  End-of-day feedback
+                </label>
+                <textarea
+                  value={editFeedback}
+                  onChange={(e) => setEditFeedback(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-white border border-ink-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                />
+              </div>
+            )}
+
             {error && (
-              <div className="mt-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+              <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
                 {error}
               </div>
             )}
-          </div>
-        )}
 
-        {todayPlan.status === 'closed' && todayPlan.feedback && !collapsed && (
-          <div className="mt-4 pt-4 border-t border-emerald-200">
-            <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
-              End-of-day feedback
-              {todayPlan.closedAt && (
-                <span className="ml-2 text-ink-400 normal-case tracking-normal">
-                  · {formatIsraelTime(todayPlan.closedAt)}
-                </span>
-              )}
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                onClick={saveEdits}
+                disabled={submitting}
+                className="px-3 py-1.5 bg-ink-900 hover:bg-ink-800 text-ink-50 text-sm rounded disabled:opacity-40"
+              >
+                {submitting ? 'Saving…' : 'Save changes'}
+              </button>
+              <button
+                onClick={cancelEditing}
+                disabled={submitting}
+                className="px-3 py-1.5 bg-white border border-ink-200 text-ink-700 text-sm rounded hover:bg-ink-50"
+              >
+                Cancel
+              </button>
             </div>
-            <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">
-              {todayPlan.feedback}
-            </p>
-          </div>
+          </>
+        ) : (
+          <>
+            {!collapsed && (
+              <div className="space-y-2">
+                {todayPlan.lines.map((line, i) => (
+                  <PlanLineDisplay key={i} line={line} platformTags={platformTags} />
+                ))}
+              </div>
+            )}
+
+            {/* End-of-day feedback section */}
+            {isSubmittedNotClosed && (
+              <div className="mt-4 pt-4 border-t border-emerald-200">
+                <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
+                  End-of-day feedback (optional but recommended)
+                </div>
+                <textarea
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  rows={2}
+                  placeholder="How did the day go? What got done, what didn't…"
+                  className="w-full px-3 py-2 bg-white border border-ink-200 rounded text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                />
+                <button
+                  onClick={async () => {
+                    if (!feedback.trim()) {
+                      setError('Add a short feedback before closing.')
+                      return
+                    }
+                    setSubmitting(true)
+                    setError('')
+                    try {
+                      await closeDailyPlan(
+                        todayPlan.id,
+                        feedback.trim(),
+                        currentUser?.displayName || '',
+                      )
+                      setFeedback('')
+                      await refresh()
+                    } catch (err) {
+                      setError(err.message)
+                    } finally {
+                      setSubmitting(false)
+                    }
+                  }}
+                  disabled={submitting || !feedback.trim()}
+                  className="mt-2 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-sm rounded transition disabled:opacity-40"
+                >
+                  {submitting ? 'Saving…' : 'Close day with feedback'}
+                </button>
+                {error && (
+                  <div className="mt-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                    {error}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {todayPlan.status === 'closed' && todayPlan.feedback && !collapsed && (
+              <div className="mt-4 pt-4 border-t border-emerald-200">
+                <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
+                  End-of-day feedback
+                  {todayPlan.closedAt && (
+                    <span className="ml-2 text-ink-400 normal-case tracking-normal">
+                      · {formatIsraelTime(todayPlan.closedAt)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-ink-700 whitespace-pre-wrap leading-relaxed">
+                  {todayPlan.feedback}
+                </p>
+              </div>
+            )}
+
+            {/* Edit history (shown when there's at least one edit) */}
+            {todayPlan.editHistory && todayPlan.editHistory.length > 0 && !collapsed && (
+              <div className="mt-4 pt-4 border-t border-emerald-200">
+                <div className="text-[11px] uppercase tracking-widest text-ink-500 font-medium mb-1.5">
+                  Edit history
+                </div>
+                <ul className="text-xs text-ink-600 space-y-0.5">
+                  {todayPlan.editHistory.map((h, i) => (
+                    <li key={i} className="font-mono">
+                      {formatIsraelTime(h.editedAt)} · <span className="text-ink-700">{h.editedBy || 'unknown'}</span>
+                      {h.fields && h.fields.length > 0 && (
+                        <span className="text-ink-400"> · {h.fields.join(', ')}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </div>
     )

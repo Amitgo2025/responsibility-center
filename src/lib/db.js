@@ -319,6 +319,7 @@ export async function createScheduleTask(data) {
     deadlineTime: data.deadlineTime || '', // 'HH:MM' Israel time, '' = no deadline
     tags: data.tags || [], // array of tag IDs (any category, but typically 'Schedule Type')
     active: data.active !== false,
+    showInGrid: data.showInGrid !== false, // show in the Schedule Grid view by default
     sortOrder: maxOrder + 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -744,6 +745,26 @@ export async function closeDailyPlan(planId, feedback, closedBy) {
     feedback: feedback || '',
     closedAt: new Date().toISOString(),
     closedBy: closedBy || '',
+  })
+}
+
+// Edit an existing daily plan (lines and/or feedback). Records an entry in
+// the plan's edit history with who edited and when.
+export async function editDailyPlan(planId, patch, editor) {
+  // Fetch current state to append to history
+  const ref = doc(db, 'dailyPlans', planId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('Plan not found')
+  const current = snap.data()
+  const editEntry = {
+    editedAt: new Date().toISOString(),
+    editedBy: editor || '',
+    fields: Object.keys(patch || {}),
+  }
+  const editHistory = Array.isArray(current.editHistory) ? current.editHistory : []
+  await updateDoc(ref, {
+    ...patch,
+    editHistory: [...editHistory, editEntry],
   })
 }
 

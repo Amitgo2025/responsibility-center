@@ -308,6 +308,7 @@ function TaskEditor({ task, onClose, onSaved, allTags, allCategories }) {
   const [color, setColor] = useState(task?.color || '#c46a3a')
   const [deadlineTime, setDeadlineTime] = useState(task?.deadlineTime || '')
   const [tagIds, setTagIds] = useState(task?.tags || [])
+  const [showInGrid, setShowInGrid] = useState(task?.showInGrid !== false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -340,6 +341,7 @@ function TaskEditor({ task, onClose, onSaved, allTags, allCategories }) {
         color,
         deadlineTime: deadlineTime || '',
         tags: tagIds,
+        showInGrid,
       }
       if (isCreate) {
         await createScheduleTask(payload)
@@ -509,6 +511,24 @@ function TaskEditor({ task, onClose, onSaved, allTags, allCategories }) {
             <p className="text-xs text-ink-400 mt-1">
               Use the <span className="font-mono">Schedule Type</span> category for filtering. You can add or rename types from Admin settings → Tags & Categories.
             </p>
+          </div>
+
+          <div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showInGrid}
+                onChange={(e) => setShowInGrid(e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <span className="text-sm font-medium text-ink-900">Show in Schedule Grid</span>
+                <p className="text-xs text-ink-500 mt-0.5">
+                  Adds a column for this task in the Schedule Grid view. Uncheck to hide it from the
+                  grid (the task itself stays active).
+                </p>
+              </div>
+            </label>
           </div>
 
           {error && (

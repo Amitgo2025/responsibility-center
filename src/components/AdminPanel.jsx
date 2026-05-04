@@ -326,12 +326,39 @@ function PeopleSection({ tabs, onChange }) {
               style={{ background: t.color || '#c46a3a' }}
             />
             <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="font-medium text-ink-900">{t.name}</span>
                 <span className="text-xs text-ink-400 font-mono">/{t.id}</span>
+                {t.isManager && (
+                  <span className="text-[9px] uppercase tracking-widest text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
+                    Manager
+                  </span>
+                )}
               </div>
               <div className="text-xs text-ink-500 truncate">{t.role}</div>
             </div>
+            <button
+              onClick={async () => {
+                try {
+                  await saveTab(t.id, { isManager: !t.isManager })
+                  onChange?.()
+                } catch (err) {
+                  setError(err.message)
+                }
+              }}
+              className={`px-2 py-1 text-[11px] rounded transition ${
+                t.isManager
+                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                  : 'bg-ink-100 text-ink-700 hover:bg-ink-200'
+              }`}
+              title={
+                t.isManager
+                  ? 'This person has full admin powers when logged in. Click to remove.'
+                  : 'Grant admin-equivalent powers to this person.'
+              }
+            >
+              {t.isManager ? '★ Manager' : '+ Make manager'}
+            </button>
             {confirmDeleteId === t.id ? (
               <div className="flex gap-1">
                 <button

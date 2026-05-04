@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { getSession, logout } from './lib/auth'
+import { getSession, logout, setManagerFlag } from './lib/auth'
 import { listTabs, listAllNotes } from './lib/db'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import AllResponsibilitiesPage from './pages/AllResponsibilitiesPage'
 import NotesPage from './pages/NotesPage'
 import SchedulePage from './pages/SchedulePage'
+import ScheduleGridPage from './pages/ScheduleGridPage'
 import ScheduleHistoryPage from './pages/ScheduleHistoryPage'
 import ChatPage, { getUnreadChatCount } from './pages/ChatPage'
 import Sidebar from './components/Sidebar'
@@ -53,6 +54,22 @@ function ProtectedShell() {
       setOpenNotesCount(notes.filter((n) => n.status === 'open').length)
       setUnreadChatCount(unread)
       setError('')
+
+      // Re-evaluate manager status: if the current user's displayName matches
+      // a tab marked isManager, mark the session as manager so they get full
+      // admin powers without needing the admin password.
+      const current = getSession()
+      if (current) {
+        const myName = (current.displayName || '').toLowerCase().trim()
+        const matchedTab = t.find(
+          (tab) => myName && (tab.name || '').toLowerCase().trim() === myName,
+        )
+        const shouldBeManager = !!(matchedTab && matchedTab.isManager)
+        if (shouldBeManager !== current.isManager) {
+          setManagerFlag(shouldBeManager)
+          setSession(getSession())
+        }
+      }
     } catch (err) {
       setError(`Could not load: ${err.message}`)
     }
@@ -80,7 +97,7 @@ function ProtectedShell() {
     <div className="flex min-h-screen">
       <Sidebar
         tabs={tabs}
-        role={session.role}
+        role={session.effectiveRole}
         displayName={session.displayName}
         openNotesCount={openNotesCount}
         unreadChatCount={unreadChatCount}
@@ -97,20 +114,21 @@ function ProtectedShell() {
           <Route path="/" element={<Navigate to="/all" replace />} />
           <Route
             path="/all"
-            element={<AllResponsibilitiesPage role={session.role} currentUser={session} />}
+            element={<AllResponsibilitiesPage role={session.effectiveRole} currentUser={session} />}
           />
-          <Route path="/notes" element={<NotesPage role={session.role} />} />
-          <Route path="/schedule" element={<SchedulePage role={session.role} />} />
-          <Route path="/history" element={<ScheduleHistoryPage role={session.role} />} />
+          <Route path="/notes" element={<NotesPage role={session.effectiveRole} />} />
+          <Route path="/schedule" element={<SchedulePage role={session.effectiveRole} />} />
+          <Route path="/schedule-grid" element={<ScheduleGridPage role={session.effectiveRole} />} />
+          <Route path="/history" element={<ScheduleHistoryPage role={session.effectiveRole} />} />
           <Route
             path="/chat"
-            element={<ChatPage role={session.role} currentUser={session} />}
+            element={<ChatPage role={session.effectiveRole} currentUser={session} />}
           />
           <Route
             path="/tab/:tabId"
             element={
               <TabView
-                role={session.role}
+                role={session.effectiveRole}
                 currentUser={session}
                 tabs={tabs}
                 onTabsChanged={refreshSidebar}
@@ -120,7 +138,7 @@ function ProtectedShell() {
           <Route path="*" element={<Navigate to="/all" replace />} />
         </Routes>
       </div>
-      {showAdminPanel && session.role === 'admin' && (
+      {showAdminPanel && session.effectiveRole === 'admin' && (
         <AdminPanel
           tabs={tabs}
           onClose={() => setShowAdminPanel(false)}

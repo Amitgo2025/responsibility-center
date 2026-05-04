@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 const SESSION_KEY = 'rc_session'
 const ROLE_KEY = 'rc_role'
 const NAME_KEY = 'rc_name'
+const MANAGER_KEY = 'rc_manager' // '1' if the viewer is also marked as manager in tabs
 
 async function hash(text) {
   const data = new TextEncoder().encode(text)
@@ -71,9 +72,26 @@ export function setDisplayName(name) {
 export function getSession() {
   const has = sessionStorage.getItem(SESSION_KEY) === '1'
   if (!has) return null
+  const role = sessionStorage.getItem(ROLE_KEY) || 'viewer'
+  const isManager = sessionStorage.getItem(MANAGER_KEY) === '1'
+  // adminEquivalent = full admin powers. True for admin password OR viewer marked as Manager
+  const adminEquivalent = role === 'admin' || isManager
   return {
-    role: sessionStorage.getItem(ROLE_KEY) || 'viewer',
+    role,
+    isManager,
+    adminEquivalent,
+    // For backward compatibility, expose `effectiveRole` that callers can use
+    // anywhere the old `role === 'admin'` check was used.
+    effectiveRole: adminEquivalent ? 'admin' : role,
     displayName: sessionStorage.getItem(NAME_KEY) || '',
+  }
+}
+
+export function setManagerFlag(isManager) {
+  if (isManager) {
+    sessionStorage.setItem(MANAGER_KEY, '1')
+  } else {
+    sessionStorage.removeItem(MANAGER_KEY)
   }
 }
 
@@ -81,6 +99,7 @@ export function logout() {
   sessionStorage.removeItem(SESSION_KEY)
   sessionStorage.removeItem(ROLE_KEY)
   sessionStorage.removeItem(NAME_KEY)
+  sessionStorage.removeItem(MANAGER_KEY)
 }
 
 export async function changePasswords({ currentAdminPassword, newViewerPassword, newAdminPassword }) {

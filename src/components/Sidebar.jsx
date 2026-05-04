@@ -8,7 +8,8 @@ export default function Sidebar({ tabs, role, displayName, openNotesCount, unrea
   function isActive(p) {
     if (p === '/all') return path === '/all' || path.startsWith('/all')
     if (p === '/notes') return path === '/notes' || path.startsWith('/notes')
-    if (p === '/schedule') return path === '/schedule' || path.startsWith('/schedule')
+    if (p === '/schedule') return path === '/schedule'
+    if (p === '/schedule-grid') return path === '/schedule-grid' || path.startsWith('/schedule-grid')
     if (p === '/history') return path === '/history' || path.startsWith('/history')
     if (p === '/chat') return path === '/chat' || path.startsWith('/chat')
     return path === p
@@ -94,6 +95,24 @@ export default function Sidebar({ tabs, role, displayName, openNotesCount, unrea
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
               <span className="text-sm font-medium">Schedule</span>
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => navigate('/schedule-grid')}
+              className={`w-full text-left px-4 py-2.5 rounded-md transition flex items-center gap-3 ${
+                isActive('/schedule-grid')
+                  ? 'bg-ink-700 text-ink-50'
+                  : 'text-ink-200 hover:bg-ink-800 hover:text-ink-50'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+              <span className="text-sm font-medium">Schedule Grid</span>
             </button>
           </li>
           <li>

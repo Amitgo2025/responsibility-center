@@ -10,6 +10,7 @@ import SchedulePage from './pages/SchedulePage'
 import ScheduleGridPage from './pages/ScheduleGridPage'
 import ScheduleHistoryPage from './pages/ScheduleHistoryPage'
 import ChatPage, { getUnreadChatCount } from './pages/ChatPage'
+import ActivityTrackerPage from './pages/ActivityTrackerPage'
 import Sidebar from './components/Sidebar'
 import TabView from './components/TabView'
 import AdminPanel from './components/AdminPanel'
@@ -123,6 +124,10 @@ function ProtectedShell() {
           <Route
             path="/chat"
             element={<ChatPage role={session.effectiveRole} currentUser={session} />}
+          />
+          <Route
+            path="/activity"
+            element={<ActivityTrackerPage role={session.effectiveRole} />}
           />
           <Route
             path="/tab/:tabId"

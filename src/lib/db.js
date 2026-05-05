@@ -839,6 +839,42 @@ export async function listDailyUpdates(dateFrom, dateTo) {
   }).sort((a, b) => b.id.localeCompare(a.id))
 }
 
+// ============== PINNED NOTICES ==============
+// Persistent multi-notice announcements. Unlike daily updates, these don't
+// auto-expire — they stay until removed. Each can carry an optional URL.
+
+export async function listPinnedNotices() {
+  const snap = await getDocs(collection(db, 'pinnedNotices'))
+  const items = []
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }))
+  // Newest first
+  return items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+}
+
+export async function createPinnedNotice(data) {
+  const payload = {
+    title: (data.title || '').trim(),
+    body: (data.body || '').trim(),
+    url: (data.url || '').trim(),
+    author: data.author || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  const ref = await addDoc(collection(db, 'pinnedNotices'), payload)
+  return { id: ref.id, ...payload }
+}
+
+export async function updatePinnedNotice(id, patch) {
+  await updateDoc(doc(db, 'pinnedNotices', id), {
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+export async function deletePinnedNotice(id) {
+  await deleteDoc(doc(db, 'pinnedNotices', id))
+}
+
 // ============== CHAT (group chat) ==============
 // Single shared chat. Messages are appended; nobody can delete except admin.
 

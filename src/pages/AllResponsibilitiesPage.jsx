@@ -10,6 +10,7 @@ import {
 import TagChip from '../components/TagChip'
 import TodayScheduleBanner from '../components/TodayScheduleBanner'
 import DailyUpdateBanner from '../components/DailyUpdateBanner'
+import PinnedNoticesBoard from '../components/PinnedNoticesBoard'
 
 const STATUS_LABELS = {
   active: { label: 'Active', tone: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
@@ -195,6 +196,11 @@ export default function AllResponsibilitiesPage({ role, currentUser }) {
       </header>
 
       <div className="px-10 py-6 max-w-6xl">
+        {/* Pinned notices — persistent multi-notice board */}
+        <div className="mb-3">
+          <PinnedNoticesBoard role={role} currentUser={currentUser} />
+        </div>
+
         {/* Daily update from admin — visible to all */}
         <div className="mb-3">
           <DailyUpdateBanner role={role} currentUser={currentUser} />

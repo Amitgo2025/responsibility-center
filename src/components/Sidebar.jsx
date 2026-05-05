@@ -12,6 +12,7 @@ export default function Sidebar({ tabs, role, displayName, openNotesCount, unrea
     if (p === '/schedule-grid') return path === '/schedule-grid' || path.startsWith('/schedule-grid')
     if (p === '/history') return path === '/history' || path.startsWith('/history')
     if (p === '/chat') return path === '/chat' || path.startsWith('/chat')
+    if (p === '/activity') return path === '/activity' || path.startsWith('/activity')
     return path === p
   }
 
@@ -150,6 +151,23 @@ export default function Sidebar({ tabs, role, displayName, openNotesCount, unrea
                   {unreadChatCount}
                 </span>
               )}
+            </button>
+          </li>
+          <li>
+            <button
+              onClick={() => navigate('/activity')}
+              className={`w-full text-left px-4 py-2.5 rounded-md transition flex items-center gap-3 ${
+                isActive('/activity')
+                  ? 'bg-ink-700 text-ink-50'
+                  : 'text-ink-200 hover:bg-ink-800 hover:text-ink-50'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              <span className="text-sm font-medium">Activity Tracker</span>
             </button>
           </li>
         </ul>

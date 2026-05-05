@@ -17,6 +17,7 @@ import NotesViewer from './NotesViewer'
 import TodayScheduleBanner from './TodayScheduleBanner'
 import MorningPlanCard from './MorningPlanCard'
 import DailyUpdateBanner from './DailyUpdateBanner'
+import PinnedNoticesBoard from './PinnedNoticesBoard'
 
 export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
   const { tabId } = useParams()
@@ -218,6 +219,9 @@ export default function TabView({ role, currentUser, tabs, onTabsChanged }) {
       </header>
 
       <div className="px-10 py-10 max-w-5xl space-y-6">
+        {/* Pinned notices — persistent admin announcements */}
+        <PinnedNoticesBoard role={role} currentUser={currentUser} />
+
         {/* Admin's daily update — read-only for viewers */}
         <DailyUpdateBanner role={role} currentUser={currentUser} />
 

@@ -61,6 +61,11 @@ export default function ActivityTrackerPage({ role }) {
   const [dateFrom, setDateFrom] = useState('') // 'DD/MM'
   const [dateTo, setDateTo] = useState('')     // 'DD/MM'
 
+  // Pagination — limits how many rows render in the table.
+  // Sums and breakdowns still operate on the full filtered set.
+  const [pageSize, setPageSize] = useState(50)
+  const [page, setPage] = useState(1)
+
   async function loadSheet() {
     setLoading(true)
     setError('')
@@ -123,6 +128,21 @@ export default function ActivityTrackerPage({ role }) {
       return true
     })
   }, [rows, containsFilters, dateFrom, dateTo])
+
+  // Reset to page 1 whenever filters or page size change so the user always
+  // sees a valid page.
+  useEffect(() => {
+    setPage(1)
+  }, [containsFilters, dateFrom, dateTo, pageSize, rows])
+
+  // Page slice — only rows that are visible in the current table view.
+  // Sums and breakdowns still use the full filteredRows.
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const pagedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize
+    return filteredRows.slice(start, start + pageSize)
+  }, [filteredRows, safePage, pageSize])
 
   // Visible columns based on view toggles
   const visibleCols = useMemo(() => {
@@ -342,13 +362,57 @@ export default function ActivityTrackerPage({ role }) {
           </div>
         )}
 
-        {/* Result count */}
-        <div className="text-sm text-ink-500 mb-2 tabular">
-          {filteredRows.length} of {rows.length} rows
-          {hasFilters && filteredRows.length !== rows.length && (
-            <span className="text-ink-400"> · filtered</span>
+        {/* Result count + pagination controls */}
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+          <div className="text-sm text-ink-500 tabular">
+            {filteredRows.length === 0 ? (
+              <>0 rows</>
+            ) : (
+              <>
+                Showing <span className="font-medium text-ink-700">
+                  {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filteredRows.length)}
+                </span> of {filteredRows.length}
+                {filteredRows.length !== rows.length && (
+                  <span className="text-ink-400"> · filtered from {rows.length}</span>
+                )}
+              </>
+            )}
+          </div>
+
+          {filteredRows.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium">
+                Per page:
+              </span>
+              {[10, 50, 100, 200, 500, 1000].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPageSize(n)}
+                  className={`px-2 py-0.5 text-xs rounded border transition ${
+                    pageSize === n
+                      ? 'bg-ink-900 text-white border-ink-900'
+                      : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <span className="text-ink-300 mx-1">|</span>
+              <PaginationControls
+                page={safePage}
+                totalPages={totalPages}
+                onChange={setPage}
+              />
+            </div>
           )}
         </div>
+
+        {/* Sums-vs-page reminder when paged */}
+        {filteredRows.length > pageSize && (
+          <p className="text-[11px] text-ink-400 mb-2 italic">
+            Sums and breakdowns above include all {filteredRows.length} filtered rows, not just this page.
+          </p>
+        )}
 
         {/* Table */}
         {!loading && rows.length === 0 && !error && (
@@ -385,7 +449,7 @@ export default function ActivityTrackerPage({ role }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row, rIdx) => (
+                {pagedRows.map((row, rIdx) => (
                   <tr key={rIdx} className="hover:bg-ink-50/40">
                     {visibleCols.map((col) => {
                       const value = row[col] || ''
@@ -424,6 +488,20 @@ export default function ActivityTrackerPage({ role }) {
             </table>
           </div>
         )}
+
+        {/* Bottom pagination — only shown when more than one page */}
+        {!loading && filteredRows.length > 0 && totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 flex-wrap mt-3">
+            <div className="text-xs text-ink-500 tabular">
+              Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filteredRows.length)} of {filteredRows.length}
+            </div>
+            <PaginationControls
+              page={safePage}
+              totalPages={totalPages}
+              onChange={setPage}
+            />
+          </div>
+        )}
       </div>
     </main>
   )
@@ -432,6 +510,50 @@ export default function ActivityTrackerPage({ role }) {
 // ============================================================
 // HELPERS
 // ============================================================
+function PaginationControls({ page, totalPages, onChange }) {
+  const canPrev = page > 1
+  const canNext = page < totalPages
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => onChange(1)}
+        disabled={!canPrev}
+        className="px-2 py-0.5 text-xs bg-white border border-ink-200 rounded hover:border-ink-400 disabled:opacity-30 disabled:cursor-not-allowed"
+        title="First page"
+      >
+        ‹‹
+      </button>
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={!canPrev}
+        className="px-2 py-0.5 text-xs bg-white border border-ink-200 rounded hover:border-ink-400 disabled:opacity-30 disabled:cursor-not-allowed"
+        title="Previous page"
+      >
+        ‹
+      </button>
+      <span className="px-2 text-xs text-ink-700 tabular">
+        Page {page} of {totalPages}
+      </span>
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={!canNext}
+        className="px-2 py-0.5 text-xs bg-white border border-ink-200 rounded hover:border-ink-400 disabled:opacity-30 disabled:cursor-not-allowed"
+        title="Next page"
+      >
+        ›
+      </button>
+      <button
+        onClick={() => onChange(totalPages)}
+        disabled={!canNext}
+        className="px-2 py-0.5 text-xs bg-white border border-ink-200 rounded hover:border-ink-400 disabled:opacity-30 disabled:cursor-not-allowed"
+        title="Last page"
+      >
+        ››
+      </button>
+    </div>
+  )
+}
+
 function ToggleChip({ checked, onChange, label, hint }) {
   return (
     <label className="flex items-center gap-1.5 cursor-pointer">

@@ -178,6 +178,25 @@ export default function ActivityTrackerPage({ role }) {
     () => groupCount(filteredRows, [COL.FLOW, COL.TYPE]),
     [filteredRows],
   )
+  const byWho = useMemo(() => groupCount(filteredRows, COL.WHO), [filteredRows])
+  const byType = useMemo(() => groupCount(filteredRows, COL.TYPE), [filteredRows])
+
+  // Unique values per filterable column — used to populate datalist suggestions
+  // for the contains-filter inputs. Computed from ALL rows (not filtered)
+  // so the user can always see every available option.
+  const uniqueValuesByCol = useMemo(() => {
+    const map = {}
+    for (const idx of CONTAINS_FILTER_COLS) {
+      const seen = new Set()
+      for (const r of rows) {
+        const v = (r[idx] || '').toString().trim()
+        if (v) seen.add(v)
+      }
+      // Sort alphabetically; cap to 500 to avoid massive datalists
+      map[idx] = Array.from(seen).sort((a, b) => a.localeCompare(b)).slice(0, 500)
+    }
+    return map
+  }, [rows])
 
   function clearAllFilters() {
     setContainsFilters({})
@@ -275,22 +294,39 @@ export default function ActivityTrackerPage({ role }) {
             )}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-            {CONTAINS_FILTER_COLS.map((idx) => (
-              <div key={idx}>
-                <label className="block text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">
-                  {headers[idx] || `Col ${String.fromCharCode(65 + idx)}`}
-                </label>
-                <input
-                  type="text"
-                  value={containsFilters[idx] || ''}
-                  onChange={(e) =>
-                    setContainsFilters((prev) => ({ ...prev, [idx]: e.target.value }))
-                  }
-                  placeholder="contains…"
-                  className="w-full px-2 py-1 text-sm bg-paper border border-ink-200 rounded focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-            ))}
+            {CONTAINS_FILTER_COLS.map((idx) => {
+              const listId = `filter-options-${idx}`
+              const options = uniqueValuesByCol[idx] || []
+              return (
+                <div key={idx}>
+                  <label className="block text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">
+                    {headers[idx] || `Col ${String.fromCharCode(65 + idx)}`}
+                    {options.length > 0 && (
+                      <span className="ml-1 text-ink-300 normal-case tracking-normal">
+                        ({options.length})
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    list={listId}
+                    value={containsFilters[idx] || ''}
+                    onChange={(e) =>
+                      setContainsFilters((prev) => ({ ...prev, [idx]: e.target.value }))
+                    }
+                    placeholder="contains… or pick from list"
+                    className="w-full px-2 py-1 text-sm bg-paper border border-ink-200 rounded focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  {options.length > 0 && (
+                    <datalist id={listId}>
+                      {options.map((opt) => (
+                        <option key={opt} value={opt} />
+                      ))}
+                    </datalist>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap pt-3 border-t border-ink-100">
@@ -355,8 +391,10 @@ export default function ActivityTrackerPage({ role }) {
 
         {/* Breakdowns */}
         {filteredRows.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
             <BreakdownPanel title="By Country" entries={byCountry} />
+            <BreakdownPanel title="By Who" entries={byWho} />
+            <BreakdownPanel title="By Type" entries={byType} />
             <BreakdownPanel title="By Flow + Country" entries={byFlowCountry} />
             <BreakdownPanel title="By Flow + Type" entries={byFlowType} />
           </div>
@@ -467,13 +505,17 @@ export default function ActivityTrackerPage({ role }) {
                               href={value}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-accent hover:underline truncate max-w-[140px] inline-block"
+                              className="text-accent hover:underline"
                               title={value}
                             >
                               link
                             </a>
                           ) : isNumeric && parseNumber(value) !== null ? (
                             formatNumber(parseNumber(value))
+                          ) : col === COL.CAMPAIGN_NAME ? (
+                            <span className="block whitespace-nowrap font-mono text-[11px]" title={value}>
+                              {value}
+                            </span>
                           ) : (
                             <span className="block max-w-[180px] truncate" title={value}>
                               {value}

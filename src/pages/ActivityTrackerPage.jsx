@@ -168,18 +168,72 @@ export default function ActivityTrackerPage({ role }) {
     return result
   }, [filteredRows, visibleCols])
 
-  // Breakdowns
-  const byCountry = useMemo(() => groupCount(filteredRows, COL.COUNTRY), [filteredRows])
-  const byFlowCountry = useMemo(
-    () => groupCount(filteredRows, [COL.FLOW, COL.COUNTRY]),
-    [filteredRows],
-  )
-  const byFlowType = useMemo(
-    () => groupCount(filteredRows, [COL.FLOW, COL.TYPE]),
-    [filteredRows],
-  )
-  const byWho = useMemo(() => groupCount(filteredRows, COL.WHO), [filteredRows])
-  const byType = useMemo(() => groupCount(filteredRows, COL.TYPE), [filteredRows])
+  // ====== BREAKDOWNS ======
+  // The user can pick any combination of 1 or 2 dimensions and we'll render
+  // a count breakdown for it. Defaults match the previous behaviour:
+  // Country, Who, Type, Flow×Country, Flow×Type.
+  const DIMENSIONS = useMemo(() => [
+    { key: 'country', label: 'Country', col: COL.COUNTRY },
+    { key: 'flow', label: 'Flow', col: COL.FLOW },
+    { key: 'type', label: 'Type', col: COL.TYPE },
+    { key: 'who', label: 'Who', col: COL.WHO },
+    { key: 'vertical', label: 'Vertical', col: COL.VERTICAL },
+    { key: 'campaign', label: 'Campaign Name', col: COL.CAMPAIGN_NAME },
+  ], [])
+
+  const DEFAULT_BREAKDOWNS = [
+    ['country'],
+    ['who'],
+    ['type'],
+    ['flow', 'country'],
+    ['flow', 'type'],
+  ]
+
+  // Each item is an array of dimension keys (1 or 2 elements).
+  // Stored as JSON-encoded arrays so React state stays simple.
+  const [activeBreakdowns, setActiveBreakdowns] = useState(DEFAULT_BREAKDOWNS)
+  const [showBreakdownPicker, setShowBreakdownPicker] = useState(false)
+
+  function dimensionByKey(key) {
+    return DIMENSIONS.find((d) => d.key === key)
+  }
+
+  function breakdownLabel(keys) {
+    return keys.map((k) => dimensionByKey(k)?.label || k).join(' + ')
+  }
+
+  function breakdownEqual(a, b) {
+    if (a.length !== b.length) return false
+    // Order-insensitive match — treat ['flow','country'] same as ['country','flow']
+    const sa = [...a].sort()
+    const sb = [...b].sort()
+    return sa.every((k, i) => k === sb[i])
+  }
+
+  function toggleBreakdown(keys) {
+    setActiveBreakdowns((prev) => {
+      const exists = prev.some((b) => breakdownEqual(b, keys))
+      if (exists) return prev.filter((b) => !breakdownEqual(b, keys))
+      return [...prev, keys]
+    })
+  }
+
+  function isBreakdownActive(keys) {
+    return activeBreakdowns.some((b) => breakdownEqual(b, keys))
+  }
+
+  // Materialize each active breakdown to its computed counts
+  const breakdownData = useMemo(() => {
+    return activeBreakdowns.map((keys) => {
+      const cols = keys.map((k) => dimensionByKey(k)?.col).filter((c) => c !== undefined)
+      return {
+        keys,
+        title: breakdownLabel(keys),
+        entries: groupCount(filteredRows, cols.length === 1 ? cols[0] : cols),
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBreakdowns, filteredRows])
 
   // Unique values per filterable column — used to populate datalist suggestions
   // for the contains-filter inputs. Computed from ALL rows (not filtered)
@@ -391,12 +445,59 @@ export default function ActivityTrackerPage({ role }) {
 
         {/* Breakdowns */}
         {filteredRows.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-            <BreakdownPanel title="By Country" entries={byCountry} />
-            <BreakdownPanel title="By Who" entries={byWho} />
-            <BreakdownPanel title="By Type" entries={byType} />
-            <BreakdownPanel title="By Flow + Country" entries={byFlowCountry} />
-            <BreakdownPanel title="By Flow + Type" entries={byFlowType} />
+          <div className="mb-4">
+            <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+              <span className="text-[10px] uppercase tracking-widest text-ink-400 font-medium">
+                Breakdowns ({activeBreakdowns.length})
+              </span>
+              <div className="flex items-center gap-2">
+                {activeBreakdowns.length !== DEFAULT_BREAKDOWNS.length && (
+                  <button
+                    onClick={() => setActiveBreakdowns(DEFAULT_BREAKDOWNS)}
+                    className="text-xs text-ink-500 hover:text-ink-900 underline"
+                  >
+                    Reset to defaults
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowBreakdownPicker(!showBreakdownPicker)}
+                  className={`px-2.5 py-1 text-xs rounded border transition ${
+                    showBreakdownPicker
+                      ? 'bg-ink-900 text-white border-ink-900'
+                      : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+                  }`}
+                >
+                  {showBreakdownPicker ? 'Done' : 'Pick breakdowns'}
+                </button>
+              </div>
+            </div>
+
+            {showBreakdownPicker && (
+              <BreakdownPicker
+                dimensions={DIMENSIONS}
+                isActive={isBreakdownActive}
+                onToggle={toggleBreakdown}
+              />
+            )}
+
+            {breakdownData.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {breakdownData.map((bd) => (
+                  <BreakdownPanel
+                    key={bd.keys.join('+')}
+                    title={bd.title}
+                    entries={bd.entries}
+                    onRemove={() => toggleBreakdown(bd.keys)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {breakdownData.length === 0 && (
+              <div className="text-xs text-ink-400 italic px-2 py-3">
+                No breakdowns selected. Click "Pick breakdowns" to add some.
+              </div>
+            )}
           </div>
         )}
 
@@ -624,24 +725,115 @@ function DatePill({ onClick, children }) {
   )
 }
 
-function BreakdownPanel({ title, entries }) {
-  const items = Array.from(entries.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 30)
+function BreakdownPanel({ title, entries, onRemove }) {
+  const items = Array.from(entries.entries()).sort((a, b) => b[1] - a[1])
   if (items.length === 0) return null
+  const total = items.reduce((s, [, c]) => s + c, 0)
   return (
     <div className="bg-white border border-ink-200 rounded-lg p-3">
-      <div className="text-[10px] uppercase tracking-widest text-ink-500 font-medium mb-2">
-        {title}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[10px] uppercase tracking-widest text-ink-500 font-medium">
+          {title}
+          <span className="ml-1.5 text-ink-300 normal-case tracking-normal">
+            ({items.length} groups · {total.toLocaleString('en-US')})
+          </span>
+        </div>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            className="text-ink-300 hover:text-red-600 text-xs leading-none"
+            title="Remove this breakdown"
+            aria-label="Remove breakdown"
+          >
+            ×
+          </button>
+        )}
       </div>
-      <ul className="space-y-0.5 max-h-48 overflow-y-auto">
+      <ul className="space-y-1 max-h-72 overflow-y-auto">
         {items.map(([key, count]) => (
-          <li key={key} className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="text-ink-700 truncate">{key || '—'}</span>
-            <span className="font-mono tabular text-ink-900 font-medium flex-shrink-0">{count}</span>
+          <li
+            key={key}
+            className="flex items-start justify-between gap-2 text-xs border-b border-ink-50 pb-0.5"
+          >
+            <span className="text-ink-700 break-words min-w-0 flex-1" title={key}>
+              {key || '—'}
+            </span>
+            <span className="font-mono tabular text-ink-900 font-medium flex-shrink-0">
+              {count.toLocaleString('en-US')}
+            </span>
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+function BreakdownPicker({ dimensions, isActive, onToggle }) {
+  // Single dimensions
+  const singles = dimensions.map((d) => [d.key])
+  // Two-dimension combinations — canonical pairs only (no reverse duplicates)
+  const pairs = []
+  for (let i = 0; i < dimensions.length; i++) {
+    for (let j = i + 1; j < dimensions.length; j++) {
+      pairs.push([dimensions[i].key, dimensions[j].key])
+    }
+  }
+
+  function dimLabel(key) {
+    return dimensions.find((d) => d.key === key)?.label || key
+  }
+
+  return (
+    <div className="bg-white border border-ink-200 rounded-lg p-3 mb-3">
+      <div className="space-y-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-ink-400 font-medium mb-1.5">
+            Single dimension
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {singles.map((keys) => {
+              const active = isActive(keys)
+              return (
+                <button
+                  key={keys.join('+')}
+                  onClick={() => onToggle(keys)}
+                  className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
+                    active
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+                  }`}
+                >
+                  {active && '✓ '}{dimLabel(keys[0])}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-ink-400 font-medium mb-1.5">
+            Combinations (A + B)
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {pairs.map((keys) => {
+              const active = isActive(keys)
+              return (
+                <button
+                  key={keys.join('+')}
+                  onClick={() => onToggle(keys)}
+                  className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
+                    active
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-white text-ink-700 border-ink-200 hover:border-ink-400'
+                  }`}
+                >
+                  {active && '✓ '}{dimLabel(keys[0])} + {dimLabel(keys[1])}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

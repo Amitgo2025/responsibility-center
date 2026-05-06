@@ -6,6 +6,7 @@ import {
   reopenTaskInstance,
   reassignTaskInstance,
   listTabs,
+  listScheduleTasks,
   todayDateString,
   effectiveStatus,
   formatIsraelTime,
@@ -15,6 +16,7 @@ import {
 export default function TodayScheduleBanner({ currentUser, role, onChanged, personId }) {
   const [instances, setInstances] = useState([])
   const [tabs, setTabs] = useState([])
+  const [templatesById, setTemplatesById] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showClosed, setShowClosed] = useState(false)
@@ -25,14 +27,19 @@ export default function TodayScheduleBanner({ currentUser, role, onChanged, pers
       // Make sure today's instances exist (creates any missing for today's templates)
       await ensureTodayInstances()
       const today = todayDateString()
-      const [inst, t] = await Promise.all([
+      const [inst, t, tpls] = await Promise.all([
         listTaskInstances({ date: today }),
         listTabs(),
+        listScheduleTasks(),
       ])
       // If a personId filter is provided, narrow to that person only
       const filtered = personId ? inst.filter((i) => i.personId === personId) : inst
       setInstances(filtered)
       setTabs(t)
+      // Index templates by id for description lookup
+      const byId = {}
+      tpls.forEach((tpl) => { byId[tpl.id] = tpl })
+      setTemplatesById(byId)
     } catch (err) {
       setError(err.message)
     }
@@ -165,6 +172,7 @@ export default function TodayScheduleBanner({ currentUser, role, onChanged, pers
             key={inst.id}
             instance={inst}
             tabs={tabs}
+            description={templatesById[inst.templateId]?.description || ''}
             onClose={() => handleClose(inst)}
             onReassign={(newId) => handleReassign(inst, newId)}
             isAdmin={role === 'admin'}
@@ -176,6 +184,7 @@ export default function TodayScheduleBanner({ currentUser, role, onChanged, pers
             key={inst.id}
             instance={inst}
             tabs={tabs}
+            description={templatesById[inst.templateId]?.description || ''}
             onClose={() => handleClose(inst)}
             onReassign={(newId) => handleReassign(inst, newId)}
             isAdmin={role === 'admin'}
@@ -187,6 +196,7 @@ export default function TodayScheduleBanner({ currentUser, role, onChanged, pers
             key={inst.id}
             instance={inst}
             tabs={tabs}
+            description={templatesById[inst.templateId]?.description || ''}
             onReopen={() => handleReopen(inst)}
             onReassign={(newId) => handleReassign(inst, newId)}
             isAdmin={role === 'admin'}
@@ -198,11 +208,13 @@ export default function TodayScheduleBanner({ currentUser, role, onChanged, pers
   )
 }
 
-function InstanceRow({ instance, tabs, onClose, onReopen, onReassign, isAdmin, now }) {
+function InstanceRow({ instance, tabs, description, onClose, onReopen, onReassign, isAdmin, now }) {
   const inst = instance
   const person = tabs.find((t) => t.id === inst.personId)
   const eff = effectiveStatus(inst, now)
   const [showReassign, setShowReassign] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const hasDescription = !!(description && description.trim())
 
   function deadlineLabel() {
     if (!inst.deadline) return null
@@ -242,9 +254,35 @@ function InstanceRow({ instance, tabs, onClose, onReopen, onReassign, isAdmin, n
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`font-medium ${eff === 'closed' ? 'text-ink-500 line-through' : 'text-ink-900'}`}>
-              {inst.name}
-            </span>
+            {hasDescription ? (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className={`font-medium text-left inline-flex items-center gap-1.5 hover:underline decoration-dotted underline-offset-2 ${
+                  eff === 'closed' ? 'text-ink-500 line-through' : 'text-ink-900'
+                }`}
+                aria-expanded={expanded}
+                title={expanded ? 'Hide instructions' : 'Show instructions'}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`transition-transform ${expanded ? 'rotate-90' : ''} text-ink-400`}
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                {inst.name}
+              </button>
+            ) : (
+              <span className={`font-medium ${eff === 'closed' ? 'text-ink-500 line-through' : 'text-ink-900'}`}>
+                {inst.name}
+              </span>
+            )}
             {person ? (
               <span
                 className="px-2 py-0.5 text-[11px] font-medium rounded"
@@ -330,6 +368,17 @@ function InstanceRow({ instance, tabs, onClose, onReopen, onReassign, isAdmin, n
           >
             Cancel
           </button>
+        </div>
+      )}
+
+      {expanded && hasDescription && (
+        <div className="mt-2 pt-2 border-t border-ink-100">
+          <div className="text-[10px] uppercase tracking-widest text-ink-400 font-medium mb-1">
+            Instructions
+          </div>
+          <p className="text-sm text-ink-700 leading-relaxed whitespace-pre-wrap break-words">
+            {description}
+          </p>
         </div>
       )}
     </li>
